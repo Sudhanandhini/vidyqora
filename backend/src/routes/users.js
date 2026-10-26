@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import User from '../models/User.js';
+import Course from '../models/Course.js';
 import { ah, allow, HttpError } from '../middleware/auth.js';
 
 const r = Router();
@@ -22,12 +23,26 @@ r.get('/', allow('admin', 'staff', 'faculty'), ah(async (req, res) => {
   res.json(await User.find(f).sort({ role: 1, name: 1 }).limit(500).lean());
 }));
 
-r.post('/', allow('admin'), ah(async (req, res) => {
+/** Enrol a new student in courses for their batch/section, plus any course ids picked (faculty: own courses only). */
+async function enrolNewStudent(user, picked, by) {
+  const match = [];
+  if (user.batch) match.push({ batch: user.batch, section: { $in: [user.section || '', '', null] } });
+  if (Array.isArray(picked) && picked.length) {
+    match.push(by.role === 'faculty' ? { _id: { $in: picked }, faculty: by._id } : { _id: { $in: picked } });
+  }
+  if (!match.length) return 0;
+  return (await Course.updateMany({ $or: match }, { $addToSet: { students: user._id } })).matchedCount;
+}
+
+// Admin can add any user; faculty can add students only.
+r.post('/', allow('admin', 'faculty'), ah(async (req, res) => {
   const data = pick(req.body);
+  if (req.user.role === 'faculty') { data.role = 'student'; delete data.active; }
   data.password = req.body.password || 'Welcome@123';
   const user = await User.create(data);
+  const enrolled = user.role === 'student' ? await enrolNewStudent(user, req.body.courses, req.user) : 0;
   const o = user.toObject(); delete o.password;
-  res.status(201).json(o);
+  res.status(201).json({ ...o, enrolled });
 }));
 
 r.put('/:id', allow('admin'), ah(async (req, res) => {

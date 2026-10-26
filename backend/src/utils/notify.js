@@ -62,7 +62,7 @@ export async function dispatch(msg) {
   const stats = { recipients: users.length, inapp: 0, email: 0, sms: 0, push: 0, failed: 0 };
   try {
     if (msg.channels.includes('inapp') || msg.channels.includes('push')) {
-      await Notification.insertMany(users.map((u) => ({ user: u._id, title: fill(msg.subject, u), body: fill(msg.body, u) })));
+      await Notification.insertMany(users.map((u) => ({ user: u._id, from: msg.sentBy, title: fill(msg.subject, u), body: fill(msg.body, u) })));
       stats.inapp = users.length;
       // Push: wire Firebase Cloud Messaging here using stored device tokens.
       if (msg.channels.includes('push')) stats.push = users.length;

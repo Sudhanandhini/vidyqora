@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { Template, Message, Notification } from '../models/Messaging.js';
+import Course from '../models/Course.js';
 import { ah, allow, HttpError } from '../middleware/auth.js';
 import { courseFor } from '../utils/access.js';
 import { dispatch, resolveRecipients } from '../utils/notify.js';
@@ -20,12 +21,16 @@ r.delete('/templates/:id', allow('admin'), ah(async (req, res) => { await Templa
 // ---- Compose / send ----
 async function checkAudience(user, audience) {
   if (!audience?.type) throw new HttpError(400, 'Choose who receives this message');
-  if (user.role === 'faculty') {
-    if (audience.type !== 'course') throw new HttpError(403, 'Faculty can message their own course students only');
-    await courseFor(user, audience.course);
-  }
   if (audience.type === 'role' && !audience.roles?.length) throw new HttpError(400, 'Choose at least one group');
   if (audience.type === 'course' && !audience.course) throw new HttpError(400, 'Choose a course');
+  if (audience.type === 'users' && !audience.users?.length) throw new HttpError(400, 'Choose at least one student');
+  if (user.role === 'faculty') {
+    if (audience.type === 'course') await courseFor(user, audience.course);
+    else if (audience.type === 'users') {
+      const mine = new Set((await Course.find({ faculty: user._id }).select('students').lean()).flatMap((c) => c.students.map(String)));
+      if (!audience.users.every((id) => mine.has(String(id)))) throw new HttpError(403, 'Faculty can message students of their own courses only');
+    } else throw new HttpError(403, 'Faculty can message their own course students only');
+  }
 }
 
 r.post('/preview', allow('admin', 'staff', 'faculty'), ah(async (req, res) => {
@@ -46,7 +51,7 @@ r.post('/', allow('admin', 'staff', 'faculty'), ah(async (req, res) => {
 r.get('/', allow('admin', 'staff', 'faculty'), ah(async (req, res) => {
   const f = req.user.role === 'faculty' ? { sentBy: req.user._id } : {};
   if (req.query.status) f.status = req.query.status;
-  res.json(await Message.find(f).populate('sentBy', 'name role').populate('audience.course', 'code name').sort({ createdAt: -1 }).limit(200).lean());
+  res.json(await Message.find(f).populate('sentBy', 'name role').populate('audience.course', 'code name').populate('audience.users', 'name').sort({ createdAt: -1 }).limit(200).lean());
 }));
 
 r.delete('/:id', allow('admin', 'staff', 'faculty'), ah(async (req, res) => {
@@ -62,7 +67,7 @@ r.delete('/:id', allow('admin', 'staff', 'faculty'), ah(async (req, res) => {
 export const notifications = Router();
 notifications.get('/', ah(async (req, res) => {
   const [items, unread] = await Promise.all([
-    Notification.find({ user: req.user._id }).sort({ createdAt: -1 }).limit(Number(req.query.limit) || 50).lean(),
+    Notification.find({ user: req.user._id }).populate('from', 'name role').sort({ createdAt: -1 }).limit(Number(req.query.limit) || 50).lean(),
     Notification.countDocuments({ user: req.user._id, read: false }),
   ]);
   res.json({ items, unread });

@@ -7,7 +7,7 @@ import Assignment, { Submission } from '../models/Assignment.js';
 import Assessment from '../models/Assessment.js';
 import Fee from '../models/Fee.js';
 import Request from '../models/Request.js';
-import Event from '../models/Event.js';
+import Event, { audiencesFor } from '../models/Event.js';
 import { Message, Notification } from '../models/Messaging.js';
 import { ah } from '../middleware/auth.js';
 import { dayStart } from '../utils/access.js';
@@ -29,7 +29,7 @@ const sumFees = async (match) => (await Fee.aggregate([{ $match: match }, { $gro
 r.get('/', ah(async (req, res) => {
   const u = req.user;
   const today = dayStart(new Date());
-  const aud = u.role === 'faculty' ? ['all', 'faculty'] : u.role === 'student' ? ['all', 'student'] : ['all', 'faculty', 'student'];
+  const aud = audiencesFor(u.role);
   const events = await Event.find({ end: { $gte: today }, audience: { $in: aud } }).sort({ start: 1 }).limit(5).lean();
 
   if (u.role === 'student') {

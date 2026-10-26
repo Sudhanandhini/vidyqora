@@ -168,7 +168,7 @@ export default function Calendar() {
           <form id="ev-form" onSubmit={save} className="grid gap-4 sm:grid-cols-2">
             <Field label="Title" className="sm:col-span-2"><Input required value={edit.title} onChange={set('title')} /></Field>
             <Field label="Type"><Select value={edit.type} onChange={set('type')} options={TYPES} /></Field>
-            <Field label="Shown to"><Select value={edit.audience} onChange={set('audience')} options={[{ value: 'all', label: 'Everyone' }, { value: 'faculty', label: 'Faculty only' }, { value: 'student', label: 'Students only' }]} /></Field>
+            <Field label="Shown to"><Select value={edit.audience} onChange={set('audience')} options={[{ value: 'all', label: 'Everyone' }, { value: 'faculty', label: 'Faculty only' }, { value: 'student', label: 'Students only' }, { value: 'staff', label: 'Office staff only' }]} /></Field>
             <Field label="From"><Input type="date" required value={edit.start} onChange={(e) => setEdit({ ...edit, start: e.target.value, end: edit.end < e.target.value ? e.target.value : edit.end })} /></Field>
             <Field label="To"><Input type="date" required min={edit.start} value={edit.end} onChange={set('end')} /></Field>
             <Field label="Description" className="sm:col-span-2"><Textarea rows={3} value={edit.description || ''} onChange={set('description')} /></Field>

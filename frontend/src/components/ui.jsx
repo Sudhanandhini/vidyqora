@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '../api';
 
 /* ---------- data hook ---------- */
@@ -109,19 +109,80 @@ const STATUS_TONE = { paid: 'green', evaluated: 'green', sent: 'green', complete
   pending: 'amber', submitted: 'blue', scheduled: 'sand', draft: 'grey', resubmit: 'amber', rejected: 'red', failed: 'red', overdue: 'red', missing: 'red' };
 export const StatusBadge = ({ status }) => <Badge tone={STATUS_TONE[status] || 'grey'}>{status?.[0]?.toUpperCase() + status?.slice(1)}</Badge>;
 
+/* ---------- pagination ---------- */
+const PAGE_SIZES = [10, 25, 50, 100];
+
+/** Client-side paging. Jumps back to page 1 when the list changes (new search/filter), stays put when rows are only removed. */
+export function usePaged(rows, keyOf = (r) => r?._id, initialSize = PAGE_SIZES[0]) {
+  const [page, setPage] = useState(0);
+  const [size, setSize] = useState(initialSize);
+  const total = rows?.length || 0;
+  const pages = Math.max(1, Math.ceil(total / size));
+  const first = total ? keyOf(rows[0], 0) : null;
+  useEffect(() => { setPage(0); }, [first]);
+  const p = Math.min(page, pages - 1);
+  const offset = p * size;
+  return {
+    items: (rows || []).slice(offset, offset + size), offset, page: p, pages, size, total,
+    setPage, setSize: (n) => { setSize(n); setPage(0); },
+  };
+}
+
+const pageList = (page, pages) => {
+  const out = [];
+  for (let i = 0; i < pages; i++) {
+    if (i === 0 || i === pages - 1 || Math.abs(i - page) <= 1) out.push(i);
+    else if (out[out.length - 1] !== '…') out.push('…');
+  }
+  return out;
+};
+
+export function Pagination({ paged, className = '' }) {
+  const { page, pages, size, total, offset, setPage, setSize } = paged;
+  if (total <= PAGE_SIZES[0]) return null;
+  const btn = 'inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-[13px] disabled:opacity-40';
+  return (
+    <nav aria-label="Pagination" className={`flex flex-wrap items-center justify-between gap-3 border-t border-primary-50 px-4 py-3 text-[13px] text-ink-soft ${className}`}>
+      <div className="flex items-center gap-3">
+        <span>Showing <b className="text-primary">{offset + 1}–{Math.min(offset + size, total)}</b> of <b className="text-primary">{total}</b></span>
+        <label className="flex items-center gap-1.5">Rows
+          <select className="field !w-auto !py-1" value={size} onChange={(e) => setSize(Number(e.target.value))}>
+            {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+      </div>
+      {pages > 1 && (
+        <div className="flex items-center gap-1">
+          <button className={`${btn} hover:bg-primary-50`} disabled={page === 0} onClick={() => setPage(page - 1)} aria-label="Previous page"><ChevronLeft size={16} /></button>
+          {pageList(page, pages).map((n, i) => (n === '…'
+            ? <span key={`e${i}`} className="px-1">…</span>
+            : <button key={n} onClick={() => setPage(n)} aria-current={n === page ? 'page' : undefined}
+              className={`${btn} ${n === page ? 'bg-primary font-semibold text-white' : 'text-primary hover:bg-primary-50'}`}>{n + 1}</button>))}
+          <button className={`${btn} hover:bg-primary-50`} disabled={page === pages - 1} onClick={() => setPage(page + 1)} aria-label="Next page"><ChevronRight size={16} /></button>
+        </div>
+      )}
+    </nav>
+  );
+}
+
 export function Table({ columns, rows, empty = 'Nothing to show yet', rowKey = (r) => r._id }) {
+  const paged = usePaged(rows, rowKey);
   if (!rows?.length) return <Empty title={empty} />;
   return (
-    <div className="overflow-x-auto">
-      <table className="tbl w-full min-w-[560px] border-collapse text-[14px]">
-        <thead><tr>{columns.map((c) => <th key={c.key || c.label} className={c.className}>{c.label}</th>)}</tr></thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={rowKey(r, i)}>{columns.map((c) => <td key={c.key || c.label} className={c.className}>{c.render ? c.render(r, i) : r[c.key]}</td>)}</tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <div className="overflow-x-auto">
+        <table className="tbl w-full min-w-[560px] border-collapse text-[14px]">
+          <thead><tr>{columns.map((c) => <th key={c.key || c.label} className={c.className}>{c.label}</th>)}</tr></thead>
+          <tbody>
+            {paged.items.map((r, j) => {
+              const i = paged.offset + j;
+              return <tr key={rowKey(r, i)}>{columns.map((c) => <td key={c.key || c.label} className={c.className}>{c.render ? c.render(r, i) : r[c.key]}</td>)}</tr>;
+            })}
+          </tbody>
+        </table>
+      </div>
+      <Pagination paged={paged} />
+    </>
   );
 }
 
@@ -138,13 +199,17 @@ export const Loading = () => <div className="flex justify-center py-12 text-prim
 
 export function Modal({ open, onClose, title, children, footer, wide }) {
   const ref = useRef(null);
+  // Callers pass inline onClose arrows; keep the latest in a ref so typing (re-render) doesn't re-run the focus effect.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!open) return undefined;
-    const k = (e) => e.key === 'Escape' && onClose();
+    const k = (e) => e.key === 'Escape' && closeRef.current();
     document.addEventListener('keydown', k);
-    ref.current?.querySelector('input,select,textarea,button')?.focus();
+    // Focus the first field in the body, not the header's close button.
+    (ref.current?.querySelector('[data-modal-body] :is(input,select,textarea)') || ref.current?.querySelector('input,select,textarea,button'))?.focus();
     return () => document.removeEventListener('keydown', k);
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-primary-900/50 p-3 sm:p-8" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -153,7 +218,7 @@ export function Modal({ open, onClose, title, children, footer, wide }) {
           <h2 className="text-lg font-semibold">{title}</h2>
           <button onClick={onClose} className="rounded p-1 text-ink-soft hover:bg-canvas" aria-label="Close"><X size={18} /></button>
         </div>
-        <div className="max-h-[75vh] overflow-y-auto p-5">{children}</div>
+        <div data-modal-body className="max-h-[75vh] overflow-y-auto p-5">{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-primary-50 px-5 py-3">{footer}</div>}
       </div>
     </div>
@@ -172,7 +237,7 @@ export function Stat({ label, value, note, tone }) {
 
 export function Tabs({ tabs, value, onChange }) {
   return (
-    <div className="mb-5 flex gap-1 overflow-x-auto border-b border-primary-100" role="tablist">
+    <div className="mb-5 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-primary-100" role="tablist">
       {tabs.map((t) => {
         const v = t.value ?? t;
         return (

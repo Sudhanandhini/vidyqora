@@ -12,14 +12,19 @@ function Compose({ onSent }) {
   const faculty = user.role === 'faculty';
   const courses = useFetch('/courses');
   const templates = useFetch('/messages/templates');
-  const blank = { subject: '', body: '', channels: ['inapp'], audience: { type: faculty ? 'course' : 'role', roles: ['student'], course: '' }, schedule: false, scheduledAt: '' };
+  const blank = { subject: '', body: '', channels: ['inapp'], audience: { type: faculty ? 'course' : 'role', roles: ['student'], course: '', users: [] }, schedule: false, scheduledAt: '' };
   const [m, setM] = useState(blank);
+  // "Particular students": pick a course, then tick students from its roster
+  const [pickCourse, setPickCourse] = useState('');
+  const [pickQ, setPickQ] = useState('');
+  const roster = useFetch(m.audience.type === 'users' && pickCourse ? `/courses/${pickCourse}` : null);
+  const rosterRows = (roster.data?.students || []).filter((s) => !pickQ || `${s.name} ${s.rollNo || ''}`.toLowerCase().includes(pickQ.toLowerCase()));
   const [count, setCount] = useState(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const a = m.audience;
-    if ((a.type === 'course' && !a.course) || (a.type === 'role' && !a.roles.length)) { setCount(null); return; }
+    if ((a.type === 'course' && !a.course) || (a.type === 'role' && !a.roles.length) || (a.type === 'users' && !a.users.length)) { setCount(null); return; }
     const t = setTimeout(() => api.post('/messages/preview', { audience: a }).then((r) => setCount(r.data.recipients)).catch(() => setCount(null)), 250);
     return () => clearTimeout(t);
   }, [m.audience]);
@@ -35,7 +40,7 @@ function Compose({ onSent }) {
     try {
       const { data } = await api.post('/messages', { ...m, scheduledAt: m.schedule && m.scheduledAt ? new Date(m.scheduledAt).toISOString() : undefined });
       toast(data.status === 'scheduled' ? `Scheduled for ${fmtDateTime(data.scheduledAt)}` : `Sent to ${data.stats?.recipients ?? 0} people`);
-      setM(blank); onSent();
+      setM(blank); setPickCourse(''); setPickQ(''); onSent();
     } catch (err) { errMsg(err); } finally { setBusy(false); }
   };
 
@@ -54,10 +59,35 @@ function Compose({ onSent }) {
       <div className="space-y-6">
         <Card title="Recipients">
           <div className="space-y-4">
-            {!faculty && (
-              <Select value={m.audience.type} onChange={(e) => aud({ type: e.target.value })} options={[{ value: 'role', label: 'User groups' }, { value: 'course', label: 'Students of a course' }]} />
-            )}
-            {m.audience.type === 'role' ? (
+            <Select value={m.audience.type} onChange={(e) => aud({ type: e.target.value })} options={[
+              ...(faculty ? [] : [{ value: 'role', label: 'User groups' }]),
+              { value: 'course', label: 'All students of a course' },
+              { value: 'users', label: 'Particular students' },
+            ]} />
+            {m.audience.type === 'users' ? (
+              <div className="space-y-2">
+                <Select value={pickCourse} onChange={(e) => { setPickCourse(e.target.value); setPickQ(''); }} placeholder="Choose a course to pick from" options={(courses.data || []).map((c) => ({ value: c._id, label: `${c.code} ${c.name}` }))} />
+                {pickCourse && (roster.loading ? <Loading /> : (
+                  <>
+                    <Input placeholder="Search by name or roll number" value={pickQ} onChange={(e) => setPickQ(e.target.value)} />
+                    <ul className="max-h-64 divide-y divide-primary-50 overflow-y-auto rounded-md border border-primary-100">
+                      {rosterRows.map((s) => (
+                        <li key={s._id}>
+                          <label className="flex cursor-pointer items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-canvas">
+                            <input type="checkbox" className="h-4 w-4 accent-[#062a52]" checked={m.audience.users.includes(s._id)} onChange={() => aud({ users: toggle(m.audience.users, s._id) })} />
+                            <span className="flex-1">{s.name}</span><span className="text-xs text-ink-faint">{s.rollNo}</span>
+                          </label>
+                        </li>
+                      ))}
+                      {!rosterRows.length && <li className="px-3 py-2 text-sm text-ink-faint">No students match</li>}
+                    </ul>
+                  </>
+                ))}
+                {m.audience.users.length > 0 && (
+                  <button type="button" className="text-xs text-primary-500 hover:underline" onClick={() => aud({ users: [] })}>Clear {m.audience.users.length} selected</button>
+                )}
+              </div>
+            ) : m.audience.type === 'role' ? (
               <div className="flex flex-wrap gap-2">
                 {GROUPS.map((g) => (
                   <button type="button" key={g.value} onClick={() => aud({ roles: toggle(m.audience.roles, g.value) })} aria-pressed={m.audience.roles.includes(g.value)}
@@ -100,7 +130,9 @@ function Sent() {
     <Card pad={false}>
       <Table rows={data} empty="No messages sent yet" columns={[
         { label: 'Message', render: (m) => <><p className="font-medium">{m.subject}</p><p className="line-clamp-1 max-w-md text-xs text-ink-faint">{m.body}</p></> },
-        { label: 'To', render: (m) => (m.audience.type === 'course' ? m.audience.course?.code : (m.audience.roles || []).join(', ')) },
+        { label: 'To', render: (m) => (m.audience.type === 'course' ? m.audience.course?.code
+          : m.audience.type === 'users' ? <span title={m.audience.users?.map((u) => u.name).join(', ')}>{m.audience.users?.length === 1 ? m.audience.users[0].name : `${m.audience.users?.length} students`}</span>
+            : (m.audience.roles || []).join(', ')) },
         { label: 'Channels', render: (m) => <div className="flex flex-wrap gap-1">{m.channels.map((c) => <Badge key={c} tone="blue">{CHANNELS.find((x) => x.value === c)?.label}</Badge>)}</div> },
         { label: 'Recipients', render: (m) => m.stats?.recipients ?? '-' },
         { label: 'When', render: (m) => fmtDateTime(m.sentAt || m.scheduledAt) },

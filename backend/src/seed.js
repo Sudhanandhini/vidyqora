@@ -18,18 +18,27 @@ await connectDB();
 await Promise.all([User, Course, Attendance, Assignment, Submission, Assessment, Event, Settings, Template, Message, Notification, Fee, Request]
   .map((m) => m.deleteMany({})));
 
+// Login accounts come from .env (one per role); defaults keep the seed working without them.
+const env = process.env;
+const login = {
+  admin: { email: env.ADMIN_EMAIL || 'admin@vidyqora.edu', password: env.ADMIN_PASSWORD || 'Admin@123' },
+  office: { email: env.OFFICE_EMAIL || 'staff@vidyqora.edu', password: env.OFFICE_PASSWORD || 'Staff@123' },
+  faculty: { email: env.FACULTY_EMAIL || 'meera@vidyqora.edu', password: env.FACULTY_PASSWORD || 'Faculty@123' },
+  student: { email: env.STUDENT_EMAIL || 'student@vidyqora.edu', password: env.STUDENT_PASSWORD || 'Student@123' },
+};
+
 const mk = (d) => new User(d).save();
-const admin = await mk({ name: 'Admin Office', email: 'admin@vidyqora.edu', password: 'Admin@123', role: 'admin', employeeId: 'EMP001' });
-await mk({ name: 'Ravi Shankar', email: 'staff@vidyqora.edu', password: 'Staff@123', role: 'staff', employeeId: 'EMP010', department: 'Accounts' });
-const f1 = await mk({ name: 'Dr. Meera Iyer', email: 'meera@vidyqora.edu', password: 'Faculty@123', role: 'faculty', employeeId: 'EMP101', department: 'Computer Science', designation: 'Associate Professor', phone: '9800000001' });
-const f2 = await mk({ name: 'Prof. Arjun Rao', email: 'arjun@vidyqora.edu', password: 'Faculty@123', role: 'faculty', employeeId: 'EMP102', department: 'Mathematics', designation: 'Assistant Professor', phone: '9800000002' });
+const admin = await mk({ name: 'Admin Office', ...login.admin, role: 'admin', employeeId: 'EMP001' });
+await mk({ name: 'Ravi Shankar', ...login.office, role: 'staff', employeeId: 'EMP010', department: 'Accounts' });
+const f1 = await mk({ name: 'Dr. Meera Iyer', ...login.faculty, role: 'faculty', employeeId: 'EMP101', department: 'Computer Science', designation: 'Associate Professor', phone: '9800000001' });
+const f2 = await mk({ name: 'Prof. Arjun Rao', email: 'arjun@vidyqora.edu', password: login.faculty.password, role: 'faculty', employeeId: 'EMP102', department: 'Mathematics', designation: 'Assistant Professor', phone: '9800000002' });
 
 const names = ['Aarav Sharma', 'Diya Nair', 'Ishaan Gupta', 'Ananya Reddy', 'Kabir Menon', 'Saanvi Patel', 'Vihaan Kulkarni', 'Myra Joseph',
   'Reyansh Das', 'Kiara Pillai', 'Aditya Bhat', 'Navya Hegde'];
 const students = [];
 for (const [i, name] of names.entries()) {
-  students.push(await mk({ name, email: i === 0 ? 'student@vidyqora.edu' : `${name.split(' ')[0].toLowerCase()}@vidyqora.edu`,
-    password: 'Student@123', role: 'student', rollNo: `BCA24${String(i + 1).padStart(3, '0')}`, program: 'BCA', batch: '2024', section: 'A',
+  students.push(await mk({ name, email: i === 0 ? login.student.email : `${name.split(' ')[0].toLowerCase()}@vidyqora.edu`,
+    password: login.student.password, role: 'student', rollNo: `BCA24${String(i + 1).padStart(3, '0')}`, program: 'BCA', batch: '2024', section: 'A',
     phone: `98100000${String(i + 10)}` }));
 }
 const ids = students.map((s) => s._id);
@@ -105,8 +114,8 @@ await Notification.insertMany([
 ]);
 
 console.log(`Seeded.
-  Admin    admin@vidyqora.edu   / Admin@123
-  Staff    staff@vidyqora.edu   / Staff@123
-  Faculty  meera@vidyqora.edu   / Faculty@123
-  Student  student@vidyqora.edu / Student@123`);
+  Admin    ${login.admin.email} / ${login.admin.password}
+  Office   ${login.office.email} / ${login.office.password}
+  Faculty  ${login.faculty.email} / ${login.faculty.password}
+  Student  ${login.student.email} / ${login.student.password}`);
 await mongoose.disconnect();

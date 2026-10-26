@@ -18,14 +18,14 @@ const NAV = {
     ['/calendar', 'Calendar', CalendarDays], ['/messaging', 'Messaging', Send], ['/reports', 'Reports', FileSpreadsheet],
   ],
   faculty: [
-    ['/', 'Dashboard', LayoutDashboard], ['/courses', 'My courses', BookOpen], ['/attendance', 'Attendance', CalendarCheck],
+    ['/', 'Dashboard', LayoutDashboard], ['/courses', 'My courses', BookOpen], ['/users', 'Students', Users], ['/attendance', 'Attendance', CalendarCheck],
     ['/assignments', 'Assignments', ClipboardList], ['/marks', 'Marks', GraduationCap], ['/calendar', 'Calendar', CalendarDays],
     ['/messaging', 'Messaging', Send], ['/reports', 'Reports', FileSpreadsheet],
   ],
   student: [
     ['/', 'Dashboard', LayoutDashboard], ['/courses', 'My courses', BookOpen], ['/attendance', 'Attendance', CalendarCheck],
     ['/assignments', 'Assignments', ClipboardList], ['/marks', 'Results', GraduationCap], ['/calendar', 'Calendar', CalendarDays],
-    ['/fees', 'Fees', Wallet], ['/requests', 'Requests', FileQuestion], ['/reports', 'Downloads', FileSpreadsheet],
+    ['/fees', 'Fees', Wallet], ['/requests', 'Requests', FileQuestion], ['/notifications', 'Messages', Bell], ['/reports', 'Downloads', FileSpreadsheet],
   ],
 };
 const ROLE_LABEL = { admin: 'Administrator', staff: 'Office staff', faculty: 'Faculty', student: 'Student' };
@@ -56,7 +56,7 @@ export default function Layout() {
   const links = NAV[user.role] || [];
   return (
     <div className="min-h-screen lg:flex">
-      <aside className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-primary text-primary-100 transition-transform lg:static lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-40 flex h-screen w-64 shrink-0 flex-col bg-primary text-primary-100 transition-transform lg:sticky lg:top-0 lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center justify-between px-6 pb-5 pt-6">
           <Link to="/"><Wordmark light /></Link>
           <button className="text-primary-200 lg:hidden" onClick={() => setOpen(false)} aria-label="Close menu"><X size={20} /></button>

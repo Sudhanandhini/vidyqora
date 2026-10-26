@@ -33,6 +33,7 @@ const messageSchema = new mongoose.Schema({
 
 const notificationSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  from: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // sender, for messages (absent on system alerts)
   title: { type: String, required: true },
   body: String,
   link: String,

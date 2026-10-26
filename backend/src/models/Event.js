@@ -6,8 +6,11 @@ const eventSchema = new mongoose.Schema({
   type: { type: String, enum: ['holiday', 'event', 'exam', 'other'], default: 'event' },
   start: { type: Date, required: true, index: true },
   end: { type: Date, required: true },
-  audience: { type: String, enum: ['all', 'faculty', 'student'], default: 'all' },
+  audience: { type: String, enum: ['all', 'faculty', 'student', 'staff'], default: 'all' },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
+
+/** Audiences a role may see. Admin and office staff manage the calendar, so they see every event. */
+export const audiencesFor = (role) => (role === 'faculty' ? ['all', 'faculty'] : role === 'student' ? ['all', 'student'] : ['all', 'faculty', 'student', 'staff']);
 
 export default mongoose.model('Event', eventSchema);

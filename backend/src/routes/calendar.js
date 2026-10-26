@@ -1,17 +1,16 @@
 import { Router } from 'express';
-import Event from '../models/Event.js';
+import Event, { audiencesFor } from '../models/Event.js';
 import Settings from '../models/Settings.js';
 import User from '../models/User.js';
 import { ah, allow, HttpError } from '../middleware/auth.js';
 import { notifyUsers } from '../utils/notify.js';
 
 const r = Router();
-const audFilter = (role) => (role === 'faculty' ? ['all', 'faculty'] : role === 'student' ? ['all', 'student'] : ['all', 'faculty', 'student']);
 
 r.get('/events', ah(async (req, res) => {
   const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 31 * 864e5);
   const to = req.query.to ? new Date(req.query.to) : new Date(Date.now() + 62 * 864e5);
-  const f = { start: { $lte: to }, end: { $gte: from }, audience: { $in: audFilter(req.user.role) } };
+  const f = { start: { $lte: to }, end: { $gte: from }, audience: { $in: audiencesFor(req.user.role) } };
   if (req.query.type) f.type = req.query.type;
   res.json(await Event.find(f).sort({ start: 1 }).lean());
 }));

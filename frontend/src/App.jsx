@@ -34,7 +34,7 @@ export default function App() {
       <Route path="/login" element={<Navigate to="/" replace />} />
       <Route element={<Layout />}>
         <Route index element={<Dashboard />} />
-        <Route path="users" element={<Guard roles={['admin']}><UsersPage /></Guard>} />
+        <Route path="users" element={<Guard roles={['admin', 'faculty']}><UsersPage /></Guard>} />
         <Route path="courses" element={<Guard roles={['admin', 'faculty', 'student']}><Courses /></Guard>} />
         <Route path="attendance" element={<Guard roles={['faculty', 'student']}><Attendance /></Guard>} />
         <Route path="assignments" element={<Guard roles={['faculty', 'student']}><Assignments /></Guard>} />

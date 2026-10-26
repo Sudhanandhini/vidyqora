@@ -2,15 +2,35 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
-import { useFetch, PageHeader, Card, Table, Button, Field, Input, Select, Loading, Empty, Badge, Modal, Tabs, fmtDate, isoDate, toast, errMsg } from '../components/ui';
+import { useFetch, usePaged, Pagination, PageHeader, Card, Table, Button, Field, Input, Select, Loading, Empty, Badge, Modal, Tabs, fmtDate, isoDate, toast, errMsg } from '../components/ui';
 
+// `present` mirrors PRESENT_CODES in backend/src/models/Attendance.js
 const CODES = [
-  { v: 'P', label: 'Present', cls: 'bg-emerald-600 text-white' },
-  { v: 'A', label: 'Absent', cls: 'bg-red-600 text-white' },
-  { v: 'L', label: 'Leave', cls: 'bg-amber-500 text-white' },
-  { v: 'OD', label: 'On duty', cls: 'bg-primary-500 text-white' },
-  { v: 'LT', label: 'Late', cls: 'bg-sand-400 text-primary' },
+  { v: 'P', label: 'Present', cls: 'bg-emerald-600 text-white', present: true, desc: 'Attended the class.' },
+  { v: 'A', label: 'Absent', cls: 'bg-red-600 text-white', present: false, desc: 'Did not attend, without approved leave.' },
+  { v: 'L', label: 'Leave', cls: 'bg-amber-500 text-white', present: false, desc: 'Did not attend, with approved leave (medical, personal).' },
+  { v: 'OD', label: 'On duty', cls: 'bg-primary-500 text-white', present: true, desc: 'Away on official college work: sports, competitions, seminars, events.' },
+  { v: 'LT', label: 'Late', cls: 'bg-sand-400 text-primary', present: true, desc: 'Attended, but arrived after the class started.' },
 ];
+
+function CodeLegend() {
+  return (
+    <div className="border-t border-primary-50 bg-canvas/60 px-4 py-3">
+      <p className="mb-2 text-[12.5px] font-semibold uppercase tracking-wide text-ink-faint">What the codes mean</p>
+      <dl className="grid gap-x-6 gap-y-2 text-[13px] sm:grid-cols-2 lg:grid-cols-3">
+        {CODES.map((c) => (
+          <div key={c.v} className="flex items-start gap-2.5">
+            <dt className={`mt-px inline-flex h-6 min-w-[34px] shrink-0 items-center justify-center rounded px-1.5 text-[11.5px] font-semibold ${c.cls}`}>{c.v}</dt>
+            <dd className="text-ink-soft">
+              <b className="text-primary">{c.label}</b>: {c.desc}{' '}
+              <span className={c.present ? 'text-emerald-700' : 'text-red-700'}>{c.present ? 'Counts as present.' : 'Counts as absent.'}</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
 
 function MarkAttendance() {
   const [sp] = useSearchParams();
@@ -70,6 +90,7 @@ function MarkAttendance() {
               <Button size="sm" variant="secondary" onClick={() => setAll('A')}>All absent</Button>
             </div>
           </div>
+          <CodeLegend />
           <ul className="divide-y divide-primary-50 border-t border-primary-50">
             {rows.map((r, i) => (
               <li key={r.student._id} className="flex flex-wrap items-center gap-3 px-4 py-2">
@@ -77,7 +98,7 @@ function MarkAttendance() {
                 <span className="min-w-[160px] flex-1 font-medium">{r.student.name}</span>
                 <div className="flex gap-1" role="radiogroup" aria-label={`Status for ${r.student.name}`}>
                   {CODES.map((c) => (
-                    <button key={c.v} role="radio" aria-checked={r.status === c.v} title={c.label}
+                    <button key={c.v} role="radio" aria-checked={r.status === c.v} title={`${c.label}: ${c.desc}`}
                       onClick={() => setRows(rows.map((x, j) => (j === i ? { ...x, status: c.v } : x)))}
                       className={`h-8 min-w-[38px] rounded px-2 text-[12.5px] font-semibold ${r.status === c.v ? c.cls : 'bg-canvas text-ink-soft hover:bg-primary-50'}`}>{c.v}</button>
                   ))}
@@ -122,6 +143,7 @@ function StudentView() {
   const { data, loading } = useFetch('/attendance/my');
   const [log, setLog] = useState(null);
   const logData = useFetch(log ? `/attendance/my/${log._id}` : null);
+  const logPaged = usePaged(logData.data, (d) => `${d.date}-${d.period}`);
   if (loading) return <Loading />;
   return (
     <>
@@ -139,14 +161,17 @@ function StudentView() {
       </Card>
       <Modal open={!!log} onClose={() => setLog(null)} title={log ? `${log.code} attendance` : ''}>
         {logData.loading ? <Loading /> : (
+          <>
           <ul className="divide-y divide-primary-50">
-            {(logData.data || []).map((d, i) => (
+            {logPaged.items.map((d, i) => (
               <li key={i} className="flex items-center justify-between py-2">
                 <span>{fmtDate(d.date)} <span className="text-xs text-ink-faint">Period {d.period}{d.topic ? `, ${d.topic}` : ''}</span></span>
                 <Badge tone={d.status === 'A' ? 'red' : d.status === 'L' ? 'amber' : 'green'}>{CODES.find((c) => c.v === d.status)?.label}</Badge>
               </li>
             ))}
           </ul>
+          <Pagination paged={logPaged} className="-mx-5 -mb-5 mt-2" />
+          </>
         )}
       </Modal>
     </>

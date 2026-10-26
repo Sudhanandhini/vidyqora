@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Plus, Paperclip } from 'lucide-react';
 import api, { fileUrl } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { useFetch, PageHeader, Card, Table, Button, Modal, Field, Input, Textarea, Select, Loading, Empty, Badge, StatusBadge, Tabs, fmtDate, fmtDateTime, isoDate, toast, errMsg } from '../components/ui';
+import { useFetch, usePaged, Pagination, PageHeader, Card, Table, Button, Modal, Field, Input, Textarea, Select, Loading, Empty, Badge, StatusBadge, Tabs, fmtDate, fmtDateTime, isoDate, toast, errMsg } from '../components/ui';
 
 const Files = ({ files }) => (files?.length ? (
   <div className="mt-1 flex flex-wrap gap-2">
@@ -16,6 +16,7 @@ function Evaluate({ assignment, onClose }) {
   const { data, loading, reload } = useFetch(assignment ? `/assignments/${assignment._id}/submissions` : null);
   const [draft, setDraft] = useState({});
   const [busy, setBusy] = useState('');
+  const subsPaged = usePaged(data?.rows, (r) => r.student._id);
   const save = async (sub, status) => {
     const d = draft[sub._id] || {};
     setBusy(sub._id + status);
@@ -34,7 +35,7 @@ function Evaluate({ assignment, onClose }) {
           <p className="mb-4 text-sm text-ink-soft">{submitted} of {data.rows.length} submitted. Due {fmtDate(deadline(data.assignment))}. Maximum {data.assignment.maxMarks} marks.
             {data.assignment.hideIdentity && ' Student identity is hidden for this assignment.'}</p>
           <ul className="divide-y divide-primary-50">
-            {data.rows.map(({ student, submission: s }) => (
+            {subsPaged.items.map(({ student, submission: s }) => (
               <li key={student._id} className="py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-medium">{student.name} <span className="text-sm font-normal text-ink-faint">{student.rollNo}</span></p>
@@ -56,6 +57,7 @@ function Evaluate({ assignment, onClose }) {
               </li>
             ))}
           </ul>
+          <Pagination paged={subsPaged} className="-mx-5 -mb-5 mt-2" />
         </>
       )}
     </Modal>
@@ -148,6 +150,11 @@ function StudentView() {
   const [text, setText] = useState('');
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
+  const all = data || [];
+  const open = all.filter((a) => !a.submission || a.submission.status === 'resubmit');
+  const done = all.filter((a) => a.submission && a.submission.status !== 'resubmit');
+  const list = tab === 'open' ? open : done;
+  const paged = usePaged(list);
 
   const submit = async (e) => {
     e.preventDefault(); setBusy(true);
@@ -160,16 +167,13 @@ function StudentView() {
 
   if (loading) return <Loading />;
   const now = new Date();
-  const open = data.filter((a) => !a.submission || a.submission.status === 'resubmit');
-  const done = data.filter((a) => a.submission && a.submission.status !== 'resubmit');
-  const list = tab === 'open' ? open : done;
 
   return (
     <>
       <Tabs tabs={[{ value: 'open', label: `To do (${open.length})` }, { value: 'done', label: `Submitted (${done.length})` }]} value={tab} onChange={setTab} />
       {!list.length ? <Card><Empty title={tab === 'open' ? 'Nothing to submit right now' : 'No submissions yet'} /></Card> : (
         <div className="space-y-3">
-          {list.map((a) => {
+          {paged.items.map((a) => {
             const overdue = new Date(deadline(a)) < now;
             const s = a.submission;
             return (
@@ -193,6 +197,7 @@ function StudentView() {
               </Card>
             );
           })}
+          <Card pad={false}><Pagination paged={paged} className="border-t-0" /></Card>
         </div>
       )}
       <Modal open={!!sub} onClose={() => setSub(null)} title={sub ? `Submit: ${sub.title}` : ''}
