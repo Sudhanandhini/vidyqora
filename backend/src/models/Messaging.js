@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import softDelete from '../utils/softDelete.js';
 
 export const CHANNELS = ['inapp', 'email', 'sms', 'push'];
 
@@ -41,6 +42,9 @@ const notificationSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 notificationSchema.index({ user: 1, read: 1, createdAt: -1 });
+
+templateSchema.plugin(softDelete);
+messageSchema.plugin(softDelete);
 
 export const Template = mongoose.model('Template', templateSchema);
 export const Message = mongoose.model('Message', messageSchema);

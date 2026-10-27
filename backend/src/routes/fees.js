@@ -4,8 +4,10 @@ import Fee from '../models/Fee.js';
 import User from '../models/User.js';
 import { ah, allow, HttpError } from '../middleware/auth.js';
 import { notifyUsers } from '../utils/notify.js';
+import { trashRoutes } from '../utils/softDelete.js';
 
 const r = Router();
+trashRoutes(r, Fee, { roles: ['admin'], populate: [['student', 'name email phone rollNo batch section']] });
 
 r.get('/', ah(async (req, res) => {
   const f = {};
@@ -13,7 +15,7 @@ r.get('/', ah(async (req, res) => {
   else if (!['admin', 'staff'].includes(req.user.role)) throw new HttpError(403, 'No access');
   if (req.query.status) f.status = req.query.status;
   if (req.query.student && req.user.role !== 'student') f.student = req.query.student;
-  const list = await Fee.find(f).populate('student', 'name rollNo batch section').sort({ dueDate: 1 }).limit(1000).lean();
+  const list = await Fee.find(f).populate('student', 'name email phone rollNo batch section').sort({ dueDate: 1 }).limit(1000).lean();
   const sum = (s) => list.filter((x) => x.status === s).reduce((t, x) => t + x.amount, 0);
   res.json({ items: list, totals: { paid: sum('paid'), pending: sum('pending') } });
 }));
@@ -34,7 +36,7 @@ r.delete('/:id', allow('admin'), ah(async (req, res) => {
   const fee = await Fee.findById(req.params.id);
   if (!fee) throw new HttpError(404, 'Fee not found');
   if (fee.status === 'paid') throw new HttpError(400, 'Paid fees cannot be deleted');
-  await fee.deleteOne();
+  await fee.softDelete(req.user);
   res.json({ message: 'Fee deleted' });
 }));
 

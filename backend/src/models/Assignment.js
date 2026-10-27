@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import softDelete from '../utils/softDelete.js';
 
 const fileSchema = new mongoose.Schema({ name: String, path: String, size: Number }, { _id: false });
 
@@ -31,6 +32,8 @@ const submissionSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 submissionSchema.index({ assignment: 1, student: 1 }, { unique: true });
+
+assignmentSchema.plugin(softDelete);
 
 export const Submission = mongoose.model('Submission', submissionSchema);
 export default mongoose.model('Assignment', assignmentSchema);

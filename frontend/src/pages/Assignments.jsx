@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, Paperclip } from 'lucide-react';
 import api, { fileUrl } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { DeletedItems, DeletedBadge, deleteWithRestore } from '../components/listTools';
 import { useFetch, usePaged, Pagination, PageHeader, Card, Table, Button, Modal, Field, Input, Textarea, Select, Loading, Empty, Badge, StatusBadge, Tabs, fmtDate, fmtDateTime, isoDate, toast, errMsg } from '../components/ui';
 
 const Files = ({ files }) => (files?.length ? (
@@ -90,8 +91,8 @@ function FacultyView() {
     try { await api.put(`/assignments/${a._id}`, { extendedDate: `${v}T23:59:00` }); toast('Deadline extended'); reload(); } catch (e) { errMsg(e); }
   };
   const remove = async (a) => {
-    if (!window.confirm(`Delete "${a.title}" and all its submissions?`)) return;
-    try { await api.delete(`/assignments/${a._id}`); toast('Assignment deleted'); reload(); } catch (e) { errMsg(e); }
+    if (!window.confirm(`Delete "${a.title}"? Its submissions are kept and you can restore it from Deleted.`)) return;
+    await deleteWithRestore('/assignments', a, 'Assignment deleted', reload);
   };
   const courseOpts = (courses.data || []).map((c) => ({ value: c._id, label: `${c.code} ${c.name}` }));
 
@@ -99,8 +100,12 @@ function FacultyView() {
     <>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <Field label="Course" className="w-full max-w-sm"><Select value={course} onChange={(e) => setCourse(e.target.value)} placeholder="All my courses" options={courseOpts} /></Field>
-        <Button onClick={() => setForm({ course: course || courseOpts[0]?.value || '', title: '', description: '', topic: '', publishDate: isoDate(), dueDate: isoDate(new Date(Date.now() + 7 * 864e5)), maxMarks: 10, hideIdentity: false })}
-          disabled={!courseOpts.length}><Plus size={16} />New assignment</Button>
+        <div className="flex gap-2">
+          <DeletedItems base="/assignments" title="Deleted assignments" onRestored={reload} name={(a) => `"${a.title}" and its submissions`}
+            label={(a) => <><p className="font-medium">{a.title} <DeletedBadge item={a} /></p><p className="text-xs text-ink-faint">{a.course?.code} · due {fmtDate(a.extendedDate || a.dueDate)}</p></>} />
+          <Button onClick={() => setForm({ course: course || courseOpts[0]?.value || '', title: '', description: '', topic: '', publishDate: isoDate(), dueDate: isoDate(new Date(Date.now() + 7 * 864e5)), maxMarks: 10, hideIdentity: false })}
+            disabled={!courseOpts.length}><Plus size={16} />New assignment</Button>
+        </div>
       </div>
       <Card pad={false}>
         {loading ? <Loading /> : (

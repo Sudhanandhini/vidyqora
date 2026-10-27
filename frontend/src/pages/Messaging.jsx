@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
+import { FilterBar, SearchBox, FilterSelect, ACTIVE_OPTIONS, DeletedBadge, useTrash, deleteWithRestore, matches } from '../components/listTools';
 import { useFetch, PageHeader, Card, Table, Button, Modal, Field, Input, Textarea, Select, Tabs, Loading, Badge, StatusBadge, fmtDateTime, toast, errMsg } from '../components/ui';
 
 const CHANNELS = [{ value: 'inapp', label: 'In-app' }, { value: 'email', label: 'Email' }, { value: 'sms', label: 'SMS' }, { value: 'push', label: 'Push' }];
@@ -119,16 +120,33 @@ function Compose({ onSent }) {
   );
 }
 
+const MSG_STATUS = [{ value: 'sent', label: 'Sent' }, { value: 'scheduled', label: 'Scheduled' }, { value: 'failed', label: 'Failed' }, { value: 'deleted', label: 'Deleted' }];
+
 function Sent() {
-  const { data, loading, reload } = useFetch('/messages');
-  const cancel = async (m) => {
-    if (!window.confirm('Cancel this scheduled message?')) return;
-    try { await api.delete(`/messages/${m._id}`); toast('Scheduled message cancelled'); reload(); } catch (e) { errMsg(e); }
+  const [f, setF] = useState({ q: '', status: '', channel: '' });
+  const setFilter = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const showDeleted = f.status === 'deleted';
+  const sent = useFetch('/messages');
+  const deleted = useFetch(showDeleted ? '/messages/deleted' : null);
+  const { data, loading } = showDeleted ? deleted : sent;
+  const reload = () => { sent.reload(); deleted.reload(); };
+  const trash = useTrash('/messages', reload);
+  const rows = (data || []).filter((m) => matches(f.q, m.subject, m.body, m.audience.course?.code, ...(m.audience.users || []).map((u) => u.name))
+    && (showDeleted || !f.status || m.status === f.status) && (!f.channel || m.channels.includes(f.channel)));
+  const remove = async (m) => {
+    const scheduled = m.status === 'scheduled';
+    if (!window.confirm(scheduled ? 'Cancel this scheduled message? It will not be sent unless restored.' : `Delete "${m.subject}" from this list?`)) return;
+    await deleteWithRestore('/messages', m, scheduled ? 'Scheduled message cancelled' : 'Message deleted', reload);
   };
-  if (loading) return <Loading />;
   return (
     <Card pad={false}>
-      <Table rows={data} empty="No messages sent yet" columns={[
+      <FilterBar>
+        <SearchBox placeholder="Search by subject, text, course or student" value={f.q} onChange={setFilter('q')} />
+        <FilterSelect label="Status" value={f.status} onChange={setFilter('status')} placeholder="All statuses" options={MSG_STATUS} />
+        <FilterSelect label="Channel" value={f.channel} onChange={setFilter('channel')} placeholder="All channels" options={CHANNELS} />
+      </FilterBar>
+      {loading ? <Loading /> : (
+      <Table rows={rows} empty={showDeleted ? 'No deleted messages' : data?.length ? 'No messages match these filters' : 'No messages sent yet'} columns={[
         { label: 'Message', render: (m) => <><p className="font-medium">{m.subject}</p><p className="line-clamp-1 max-w-md text-xs text-ink-faint">{m.body}</p></> },
         { label: 'To', render: (m) => (m.audience.type === 'course' ? m.audience.course?.code
           : m.audience.type === 'users' ? <span title={m.audience.users?.map((u) => u.name).join(', ')}>{m.audience.users?.length === 1 ? m.audience.users[0].name : `${m.audience.users?.length} students`}</span>
@@ -136,15 +154,26 @@ function Sent() {
         { label: 'Channels', render: (m) => <div className="flex flex-wrap gap-1">{m.channels.map((c) => <Badge key={c} tone="blue">{CHANNELS.find((x) => x.value === c)?.label}</Badge>)}</div> },
         { label: 'Recipients', render: (m) => m.stats?.recipients ?? '-' },
         { label: 'When', render: (m) => fmtDateTime(m.sentAt || m.scheduledAt) },
-        { label: 'Status', render: (m) => <StatusBadge status={m.status} /> },
-        { label: '', className: 'text-right', render: (m) => m.status === 'scheduled' && <Button size="sm" variant="danger" onClick={() => cancel(m)}>Cancel</Button> },
+        { label: 'Status', render: (m) => (m.deletedAt ? <DeletedBadge item={m} /> : <StatusBadge status={m.status} />) },
+        { label: '', className: 'text-right', render: (m) => (m.deletedAt ? trash.actions(m, `"${m.subject}"`)
+          : <Button size="sm" variant="danger" onClick={() => remove(m)}>{m.status === 'scheduled' ? 'Cancel' : 'Delete'}</Button>) },
       ]} />
+      )}
     </Card>
   );
 }
 
 function Templates() {
-  const { data, loading, reload } = useFetch('/messages/templates');
+  const [f, setF] = useState({ q: '', status: '' });
+  const setFilter = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const showDeleted = f.status === 'deleted';
+  const current = useFetch('/messages/templates');
+  const deleted = useFetch(showDeleted ? '/messages/templates/deleted' : null);
+  const { data, loading } = showDeleted ? deleted : current;
+  const reload = () => { current.reload(); deleted.reload(); };
+  const trash = useTrash('/messages/templates', reload);
+  const rows = (data || []).filter((t) => matches(f.q, t.name, t.subject, t.body, t.event)
+    && (showDeleted || !f.status || String(!!t.active) === f.status));
   const [edit, setEdit] = useState(null);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setEdit({ ...edit, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
@@ -157,19 +186,24 @@ function Templates() {
   };
   const remove = async (t) => {
     if (!window.confirm(`Delete template "${t.name}"?`)) return;
-    try { await api.delete(`/messages/templates/${t._id}`); toast('Template deleted'); reload(); } catch (e) { errMsg(e); }
+    await deleteWithRestore('/messages/templates', t, 'Template deleted', reload);
   };
   return (
     <>
       <div className="mb-4 flex justify-end"><Button onClick={() => setEdit({ name: '', event: '', channel: 'inapp', subject: '', body: '', dltTemplateId: '', active: true })}><Plus size={16} />New template</Button></div>
       <Card pad={false}>
+        <FilterBar>
+          <SearchBox placeholder="Search by name, subject, text or trigger" value={f.q} onChange={setFilter('q')} />
+          <FilterSelect label="Status" value={f.status} onChange={setFilter('status')} placeholder="All statuses" options={ACTIVE_OPTIONS} />
+        </FilterBar>
         {loading ? <Loading /> : (
-          <Table rows={data} empty="No templates yet" columns={[
+          <Table rows={rows} empty={showDeleted ? 'No deleted templates' : data?.length ? 'No templates match these filters' : 'No templates yet'} columns={[
             { label: 'Template', render: (t) => <><p className="font-medium">{t.name}</p><p className="line-clamp-1 max-w-md text-xs text-ink-faint">{t.body}</p></> },
             { label: 'Channel', render: (t) => CHANNELS.find((c) => c.value === t.channel)?.label },
             { label: 'Trigger', render: (t) => t.event || 'Manual' },
-            { label: 'Status', render: (t) => <Badge tone={t.active ? 'green' : 'grey'}>{t.active ? 'Active' : 'Inactive'}</Badge> },
-            { label: '', className: 'text-right', render: (t) => <div className="flex justify-end gap-1"><Button size="sm" variant="ghost" onClick={() => setEdit(t)}>Edit</Button><Button size="sm" variant="danger" onClick={() => remove(t)}>Delete</Button></div> },
+            { label: 'Status', render: (t) => (t.deletedAt ? <DeletedBadge item={t} /> : <Badge tone={t.active ? 'green' : 'grey'}>{t.active ? 'Active' : 'Inactive'}</Badge>) },
+            { label: '', className: 'text-right', render: (t) => (t.deletedAt ? trash.actions(t, `template "${t.name}"`)
+              : <div className="flex justify-end gap-1"><Button size="sm" variant="ghost" onClick={() => setEdit(t)}>Edit</Button><Button size="sm" variant="danger" onClick={() => remove(t)}>Delete</Button></div>) },
           ]} />
         )}
       </Card>

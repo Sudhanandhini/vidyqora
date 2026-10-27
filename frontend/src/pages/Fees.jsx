@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
-import { useFetch, PageHeader, Card, Table, Button, Modal, Field, Input, Select, Tabs, Loading, Stat, StatusBadge, fmtDate, fmtDateTime, inr, isoDate, toast, errMsg } from '../components/ui';
+import { FilterBar, SearchBox, FilterSelect, DeletedBadge, useTrash, deleteWithRestore, matches } from '../components/listTools';
+import { useFetch, PageHeader, Card, Table, Button, Modal, Field, Input, Select, MasterSelect, useMasters, Tabs, Loading, Stat, StatusBadge, fmtDate, fmtDateTime, inr, isoDate, toast, errMsg } from '../components/ui';
 
 function Receipt({ fee, onClose }) {
   return (
@@ -56,9 +57,25 @@ function StudentFees() {
 }
 
 function OfficeFees() {
-  const [status, setStatus] = useState('pending');
-  const { data, loading, reload } = useFetch('/fees', { status });
+  const { user } = useAuth();
+  const [status, setStatus] = useState('pending'); // pending | paid | '' (all) | deleted (admin)
+  const showDeleted = status === 'deleted';
+  const fees = useFetch(showDeleted ? null : '/fees', { status });
+  const deleted = useFetch(showDeleted ? '/fees/deleted' : null);
+  const data = showDeleted ? (deleted.data && { items: deleted.data, totals: {} }) : fees.data;
+  const loading = showDeleted ? deleted.loading : fees.loading;
+  const reload = () => { fees.reload(); deleted.reload(); };
+  const trash = useTrash('/fees', reload);
+  const [f, setF] = useState({ q: '', batch: '', section: '' });
+  const setFilter = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const rows = (data?.items || []).filter((x) => matches(f.q, x.student?.name, x.student?.rollNo, x.student?.email, x.student?.phone, x.receiptNo, x.title)
+    && (!f.batch || x.student?.batch === f.batch) && (!f.section || x.student?.section === f.section));
+  const remove = async (x) => {
+    if (!window.confirm(`Delete "${x.title}" for ${x.student?.name}? You can restore it from the Deleted tab.`)) return;
+    await deleteWithRestore('/fees', x, 'Fee deleted', reload);
+  };
   const students = useFetch('/users', { role: 'student', active: 'true' });
+  const masters = useMasters();
   const [form, setForm] = useState(null);
   const [record, setRecord] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -78,26 +95,35 @@ function OfficeFees() {
 
   return (
     <>
-      {data && (
+      {data && !showDeleted && (
         <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
           <Stat label={status === 'paid' ? 'Collected' : status === 'pending' ? 'Outstanding' : 'Total'} value={inr((data.totals.paid || 0) + (data.totals.pending || 0))} />
           <Stat label="Entries" value={data.items.length} />
         </div>
       )}
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <Tabs tabs={[{ value: 'pending', label: 'Outstanding' }, { value: 'paid', label: 'Paid' }, { value: '', label: 'All' }]} value={status} onChange={setStatus} />
+        <Tabs tabs={[{ value: 'pending', label: 'Outstanding' }, { value: 'paid', label: 'Paid' }, { value: '', label: 'All' }, ...(user.role === 'admin' ? [{ value: 'deleted', label: 'Deleted' }] : [])]} value={status} onChange={setStatus} />
         <Button className="mb-5" onClick={() => setForm({ target: 'batch', title: '', term: '', amount: '', dueDate: isoDate(new Date(Date.now() + 15 * 864e5)), batch: '', section: '', student: '' })}><Plus size={16} />Add fee</Button>
       </div>
       <Card pad={false}>
-        {loading ? <Loading /> : (
-          <Table rows={data.items} empty="No fee entries" columns={[
+        <FilterBar>
+          <SearchBox placeholder="Search by student, roll number, email, phone or receipt" value={f.q} onChange={setFilter('q')} />
+          <FilterSelect label="Batch" value={f.batch} onChange={setFilter('batch')} placeholder="All batches" options={masters.batches} />
+          <FilterSelect label="Section" value={f.section} onChange={setFilter('section')} placeholder="All sections" options={masters.sections} />
+        </FilterBar>
+        {loading || !data ? <Loading /> : (
+          <Table rows={rows} empty={showDeleted ? 'No deleted fees' : 'No fee entries match these filters'} columns={[
             { label: 'Student', render: (f) => <><p className="font-medium">{f.student?.name}</p><p className="text-xs text-ink-faint">{f.student?.rollNo} {[f.student?.batch, f.student?.section].filter(Boolean).join(' / ')}</p></> },
             { label: 'Fee', key: 'title' },
             { label: 'Amount', render: (f) => inr(f.amount) },
             { label: 'Due', render: (f) => fmtDate(f.dueDate) },
-            { label: 'Status', render: (f) => <StatusBadge status={f.status} /> },
+            { label: 'Status', render: (f) => (f.deletedAt ? <DeletedBadge item={f} /> : <StatusBadge status={f.status} />) },
             { label: 'Paid on', render: (f) => (f.paidAt ? <>{fmtDate(f.paidAt)}<p className="text-xs text-ink-faint">{f.mode} {f.receiptNo}</p></> : '-') },
-            { label: '', className: 'text-right', render: (f) => f.status === 'pending' && <Button size="sm" variant="secondary" onClick={() => setRecord({ _id: f._id, title: f.title, name: f.student?.name, amount: f.amount, mode: 'Cash', reference: '' })}>Record payment</Button> },
+            { label: '', className: 'text-right', render: (f) => (f.deletedAt ? trash.actions(f, `"${f.title}" for ${f.student?.name}`) : f.status === 'pending' && (
+              <div className="flex justify-end gap-1">
+                <Button size="sm" variant="secondary" onClick={() => setRecord({ _id: f._id, title: f.title, name: f.student?.name, amount: f.amount, mode: 'Cash', reference: '' })}>Record payment</Button>
+                {user.role === 'admin' && <Button size="sm" variant="danger" onClick={() => remove(f)}>Delete</Button>}
+              </div>)) },
           ]} />
         )}
       </Card>
@@ -108,8 +134,8 @@ function OfficeFees() {
           <form id="fee-form" onSubmit={create} className="grid gap-4 sm:grid-cols-2">
             <Field label="Apply to" className="sm:col-span-2"><Select value={form.target} onChange={set('target')} options={[{ value: 'batch', label: 'A batch / section' }, { value: 'student', label: 'One student' }]} /></Field>
             {form.target === 'batch' ? (
-              <><Field label="Batch"><Input required value={form.batch} onChange={set('batch')} placeholder="2024" /></Field>
-                <Field label="Section" hint="Blank for all sections"><Input value={form.section} onChange={set('section')} /></Field></>
+              <><Field label="Batch"><MasterSelect required list={masters.batches} value={form.batch} onChange={set('batch')} /></Field>
+                <Field label="Section" hint="Blank for all sections"><MasterSelect list={masters.sections} value={form.section} onChange={set('section')} placeholder="All sections" /></Field></>
             ) : (
               <Field label="Student" className="sm:col-span-2"><Select required value={form.student} onChange={set('student')} placeholder="Choose a student" options={(students.data || []).map((s) => ({ value: s._id, label: `${s.rollNo || ''} ${s.name}` }))} /></Field>
             )}

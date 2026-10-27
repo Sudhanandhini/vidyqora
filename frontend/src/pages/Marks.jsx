@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
+import { DeletedItems, DeletedBadge, deleteWithRestore } from '../components/listTools';
 import { useFetch, PageHeader, Card, Table, Button, Modal, Field, Input, Select, Loading, Empty, StatusBadge, fmtDate, isoDate, toast, errMsg } from '../components/ui';
 
 function MarkEntry({ id, onClose }) {
@@ -69,7 +70,7 @@ function FacultyView() {
   };
   const remove = async (a) => {
     if (!window.confirm(`Delete ${a.name}?`)) return;
-    try { await api.delete(`/assessments/${a._id}`); toast('Assessment deleted'); reload(); } catch (e) { errMsg(e); }
+    await deleteWithRestore('/assessments', a, 'Assessment deleted', reload);
   };
 
   if (courses.loading) return <Loading />;
@@ -78,7 +79,11 @@ function FacultyView() {
     <>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <Field label="Course" className="w-full max-w-sm"><Select value={id} onChange={(e) => setCourse(e.target.value)} options={courses.data.map((c) => ({ value: c._id, label: `${c.code} ${c.name}` }))} /></Field>
-        <Button onClick={() => setForm({ name: '', maxMarks: 25, date: isoDate() })}><Plus size={16} />New assessment</Button>
+        <div className="flex gap-2">
+          <DeletedItems base="/assessments" params={{ course: id }} title="Deleted assessments" onRestored={reload} name={(a) => a.name}
+            label={(a) => <><p className="font-medium">{a.name} <DeletedBadge item={a} /></p><p className="text-xs text-ink-faint">{fmtDate(a.date)} · max {a.maxMarks}</p></>} />
+          <Button onClick={() => setForm({ name: '', maxMarks: 25, date: isoDate() })}><Plus size={16} />New assessment</Button>
+        </div>
       </div>
       <Card pad={false}>
         {loading ? <Loading /> : (

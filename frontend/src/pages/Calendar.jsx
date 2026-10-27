@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
+import { DeletedItems, DeletedBadge, deleteWithRestore } from '../components/listTools';
 import { useFetch, PageHeader, Card, Button, Modal, Field, Input, Textarea, Select, Badge, Tabs, Loading, isoDate, fmtDate, toast, errMsg } from '../components/ui';
 
 const TYPES = [
@@ -112,8 +113,8 @@ export default function Calendar() {
     } catch (err) { errMsg(err); } finally { setBusy(false); }
   };
   const remove = async () => {
-    if (!window.confirm(`Delete "${edit.title}"?`)) return;
-    try { await api.delete(`/calendar/events/${edit._id}`); toast('Event deleted'); setEdit(null); reload(); } catch (err) { errMsg(err); }
+    if (!window.confirm(`Delete "${edit.title}"? You can restore it from Deleted.`)) return;
+    if (await deleteWithRestore('/calendar/events', edit, 'Event deleted', reload)) setEdit(null);
   };
   const set = (k) => (e) => setEdit({ ...edit, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
   const monthName = cursor.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
@@ -122,7 +123,11 @@ export default function Calendar() {
   return (
     <>
       <PageHeader title="Academic calendar" subtitle={settings.data?.academicYear?.label ? `Academic year ${settings.data.academicYear.label}` : 'Holidays, exams and events.'}
-        actions={canEdit && tab === 'month' && <Button onClick={() => openNew(new Date())}><Plus size={16} />Add event</Button>} />
+        actions={canEdit && tab === 'month' && <>
+          <DeletedItems base="/calendar/events" title="Deleted events" onRestored={reload} name={(e) => `"${e.title}"`}
+            label={(e) => <><p className="font-medium">{e.title} <DeletedBadge item={e} /></p><p className="text-xs text-ink-faint">{T[e.type]?.label} · {fmtDate(e.start)}{isoDate(e.start) !== isoDate(e.end) ? ` to ${fmtDate(e.end)}` : ''}</p></>} />
+          <Button onClick={() => openNew(new Date())}><Plus size={16} />Add event</Button>
+        </>} />
       {user.role === 'admin' && <Tabs tabs={[{ value: 'month', label: 'Calendar' }, { value: 'settings', label: 'Settings' }]} value={tab} onChange={setTab} />}
       {tab === 'settings' ? <Settings /> : (
         <div className="grid gap-6 xl:grid-cols-[1fr_280px]">

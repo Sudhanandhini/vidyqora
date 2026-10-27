@@ -18,7 +18,10 @@ r.get('/me', protect, (req, res) => res.json(req.user));
 
 r.put('/profile', protect, ah(async (req, res) => {
   const { phone, name } = req.body;
-  const user = await User.findByIdAndUpdate(req.user._id, { ...(phone !== undefined && { phone }), ...(name && { name }) }, { new: true });
+  const user = await User.findById(req.user._id);
+  if (phone !== undefined) user.phone = phone;
+  if (name) user.name = name;
+  await user.save(); // same format and uniqueness checks as admin edits
   res.json(pub(user));
 }));
 

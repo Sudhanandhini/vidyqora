@@ -76,6 +76,7 @@ await Assessment.create({ course: c3._id, name: 'Quiz 1', maxMarks: 10, date: da
 await Assessment.create({ course: c2._id, name: 'Internal Test 1', maxMarks: 25, date: day(2), status: 'draft', createdBy: f1._id, marks: ids.map((s) => ({ student: s })) });
 
 await Settings.create({ key: 'main', institutionName: process.env.INSTITUTION_NAME || 'Vidyqora Institute', weeklyOffs: [0],
+  levels: ['UG', 'PG'], departments: ['Accounts', 'Computer Science', 'Mathematics'], programs: ['BCA'], batches: ['2024'], sections: ['A', 'B'], semesters: ['1', '2', '3', '4', '5', '6'],
   academicYear: { label: '2026-27', start: new Date('2026-06-01'), end: new Date('2027-04-30') },
   sessions: [{ name: 'Period 1', start: '09:00', end: '09:50' }, { name: 'Period 2', start: '09:50', end: '10:40' }, { name: 'Break', start: '10:40', end: '11:00', isBreak: true },
     { name: 'Period 3', start: '11:00', end: '11:50' }, { name: 'Period 4', start: '11:50', end: '12:40' }, { name: 'Lunch', start: '12:40', end: '13:30', isBreak: true },

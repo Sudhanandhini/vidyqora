@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import softDelete from '../utils/softDelete.js';
 
 const assessmentSchema = new mongoose.Schema({
   course: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true, index: true },
@@ -16,5 +17,7 @@ const assessmentSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 assessmentSchema.index({ 'marks.student': 1 });
+
+assessmentSchema.plugin(softDelete);
 
 export default mongoose.model('Assessment', assessmentSchema);

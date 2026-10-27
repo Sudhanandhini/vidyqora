@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
-import { useFetch, PageHeader, Card, Table, Button, Modal, Field, Input, Select, Loading, Empty, isoDate, fmtDate, toast, errMsg } from '../components/ui';
+import { FilterBar, SearchBox, FilterSelect, DeletedBadge, useTrash, deleteWithRestore, matches } from '../components/listTools';
+import { useFetch, PageHeader, Card, Table, Button, Modal, Field, Input, Select, MasterSelect, useMasters, Loading, Empty, isoDate, fmtDate, toast, errMsg } from '../components/ui';
 
-const BLANK = { code: '', name: '', department: '', program: '', batch: '', section: '', credits: 3, faculty: '' };
+const BLANK = { code: '', name: '', department: '', level: '', program: '', batch: '', section: '', semester: '', credits: 3, faculty: '' };
 
 function CourseDetail({ id, onClose, canPlan }) {
   const { data, loading, setData } = useFetch(id ? `/courses/${id}` : null);
@@ -62,8 +63,17 @@ function CourseDetail({ id, onClose, canPlan }) {
 export default function Courses() {
   const { user } = useAuth();
   const admin = user.role === 'admin';
-  const { data, loading, reload } = useFetch('/courses');
+  const [show, setShow] = useState(''); // '' = current courses, 'deleted'
+  const [f, setF] = useState({ q: '', level: '', program: '', batch: '', semester: '' });
+  const current = useFetch('/courses');
+  const deleted = useFetch(show === 'deleted' ? '/courses/deleted' : null);
+  const { data, loading, reload } = show === 'deleted' ? deleted : current;
   const faculty = useFetch(admin ? '/users' : null, { role: 'faculty', active: 'true' });
+  const masters = useMasters();
+  const trash = useTrash('/courses', () => { deleted.reload(); current.reload(); });
+  const setFilter = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const rows = (data || []).filter((c) => matches(f.q, c.code, c.name, c.faculty?.name)
+    && ['level', 'program', 'batch', 'semester'].every((k) => !f[k] || c[k] === f[k]));
   const [edit, setEdit] = useState(null);
   const [view, setView] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -78,8 +88,8 @@ export default function Courses() {
     } catch (err) { errMsg(err); } finally { setBusy(false); }
   };
   const remove = async (c) => {
-    if (!window.confirm(`Delete ${c.code}? Attendance and marks linked to it will stay in the database.`)) return;
-    try { await api.delete(`/courses/${c._id}`); toast('Course deleted'); reload(); } catch (e) { errMsg(e); }
+    if (!window.confirm(`Delete ${c.code}? You can restore it later from Show: Deleted.`)) return;
+    await deleteWithRestore('/courses', c, `${c.code} deleted`, () => { current.reload(); deleted.reload(); });
   };
 
   return (
@@ -87,20 +97,28 @@ export default function Courses() {
       <PageHeader title={admin ? 'Courses' : 'My courses'} subtitle={admin ? 'Create courses, assign faculty and enrol a batch.' : 'Syllabus coverage and class lists.'}
         actions={admin && <Button onClick={() => setEdit({ ...BLANK })}><Plus size={16} />Add course</Button>} />
       <Card pad={false}>
+        <FilterBar>
+          <SearchBox placeholder="Search by course code, name or faculty" value={f.q} onChange={setFilter('q')} />
+          <FilterSelect label="Level" value={f.level} onChange={setFilter('level')} placeholder="All levels" options={masters.levels} />
+          <FilterSelect label="Program" value={f.program} onChange={setFilter('program')} placeholder="All programs" options={masters.programs} />
+          <FilterSelect label="Batch" value={f.batch} onChange={setFilter('batch')} placeholder="All batches" options={masters.batches} />
+          <FilterSelect label="Semester" value={f.semester} onChange={setFilter('semester')} placeholder="All semesters" options={masters.semesters} />
+          {admin && <FilterSelect label="Show" value={show} onChange={(e) => setShow(e.target.value)} placeholder="Current" options={[{ value: 'deleted', label: 'Deleted' }]} />}
+        </FilterBar>
         {loading ? <Loading /> : (
-          <Table rows={data} empty={admin ? 'No courses yet. Add the first one.' : 'No courses assigned yet'} columns={[
-            { label: 'Course', render: (c) => <><p className="font-medium">{c.code}</p><p className="text-sm text-ink-soft">{c.name}</p></> },
-            { label: 'Batch / Section', render: (c) => [c.program, c.batch, c.section].filter(Boolean).join(' / ') || '-' },
+          <Table rows={rows} empty={show === 'deleted' ? 'No deleted courses' : data?.length ? 'No courses match these filters' : admin ? 'No courses yet. Add the first one.' : 'No courses assigned yet'} columns={[
+            { label: 'Course', render: (c) => <><p className="font-medium">{c.code} {c.deletedAt && <DeletedBadge item={c} />}</p><p className="text-sm text-ink-soft">{c.name}</p></> },
+            { label: 'Batch / Section', render: (c) => [c.level, c.program, c.batch, c.section, c.semester].filter(Boolean).join(' / ') || '-' },
             { label: 'Faculty', render: (c) => c.faculty?.name || '-' },
-            { label: 'Students', key: 'studentCount' },
-            { label: 'Syllabus', render: (c) => (
-              <div className="flex items-center gap-2"><div className="h-1.5 w-20 rounded-full bg-primary-50"><div className="h-full rounded-full bg-sand-400" style={{ width: `${c.progress}%` }} /></div><span className="text-xs text-ink-faint">{c.progress}%</span></div>) },
-            { label: '', className: 'text-right', render: (c) => (
+            { label: 'Students', render: (c) => c.studentCount ?? c.students?.length ?? 0 },
+            { label: 'Syllabus', render: (c) => (c.deletedAt ? '-' : (
+              <div className="flex items-center gap-2"><div className="h-1.5 w-20 rounded-full bg-primary-50"><div className="h-full rounded-full bg-sand-400" style={{ width: `${c.progress}%` }} /></div><span className="text-xs text-ink-faint">{c.progress}%</span></div>)) },
+            { label: '', className: 'text-right', render: (c) => (c.deletedAt ? trash.actions(c, c.code) : (
               <div className="flex justify-end gap-1">
                 <Button size="sm" variant="ghost" onClick={() => setView(c._id)}>{user.role === 'faculty' ? 'Lesson plan' : 'View'}</Button>
                 {admin && <Button size="sm" variant="ghost" onClick={() => setEdit({ ...BLANK, ...c, faculty: c.faculty?._id || '' })}>Edit</Button>}
                 {admin && <Button size="sm" variant="danger" onClick={() => remove(c)}>Delete</Button>}
-              </div>) },
+              </div>)) },
           ]} />
         )}
       </Card>
@@ -114,10 +132,12 @@ export default function Courses() {
             <Field label="Course code"><Input required value={edit.code} onChange={set('code')} /></Field>
             <Field label="Credits"><Input type="number" min={0} value={edit.credits} onChange={set('credits')} /></Field>
             <Field label="Course name" className="sm:col-span-2"><Input required value={edit.name} onChange={set('name')} /></Field>
-            <Field label="Department"><Input value={edit.department} onChange={set('department')} /></Field>
-            <Field label="Program"><Input value={edit.program} onChange={set('program')} /></Field>
-            <Field label="Batch" hint="Students of this batch are enrolled"><Input value={edit.batch} onChange={set('batch')} /></Field>
-            <Field label="Section" hint="Leave blank for all sections"><Input value={edit.section} onChange={set('section')} /></Field>
+            <Field label="Department"><MasterSelect list={masters.departments} value={edit.department} onChange={set('department')} /></Field>
+            <Field label="Level"><MasterSelect list={masters.levels} value={edit.level} onChange={set('level')} /></Field>
+            <Field label="Program"><MasterSelect list={masters.programs} value={edit.program} onChange={set('program')} /></Field>
+            <Field label="Batch" hint="Students of this batch are enrolled"><MasterSelect list={masters.batches} value={edit.batch} onChange={set('batch')} /></Field>
+            <Field label="Section" hint="Leave blank for all sections"><MasterSelect list={masters.sections} value={edit.section} onChange={set('section')} placeholder="All sections" /></Field>
+            <Field label="Semester"><MasterSelect list={masters.semesters} value={edit.semester} onChange={set('semester')} /></Field>
             <Field label="Faculty" className="sm:col-span-2">
               <Select value={edit.faculty} onChange={set('faculty')} placeholder="Not assigned" options={(faculty.data || []).map((f) => ({ value: f._id, label: `${f.name} (${f.department || f.email})` }))} />
             </Field>

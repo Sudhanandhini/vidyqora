@@ -3,13 +3,22 @@ import { Plus } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useFetch, PageHeader, Card, Table, Button, Modal, Field, Textarea, Select, Tabs, Loading, StatusBadge, fmtDate, toast, errMsg } from '../components/ui';
+import { FilterBar, SearchBox, FilterSelect, DeletedBadge, useTrash, deleteWithRestore, matches } from '../components/listTools';
 
 export default function Requests() {
   const { user } = useAuth();
   const student = user.role === 'student';
-  const [status, setStatus] = useState(student ? '' : 'pending');
-  const { data, loading, reload } = useFetch('/requests', { status });
-  const types = useFetch(student ? '/requests/types' : null);
+  const admin = user.role === 'admin';
+  const [status, setStatus] = useState(student ? '' : 'pending'); // ... | deleted (admin)
+  const showDeleted = status === 'deleted';
+  const current = useFetch(showDeleted ? null : '/requests', { status });
+  const deleted = useFetch(showDeleted ? '/requests/deleted' : null);
+  const { data, loading } = showDeleted ? deleted : current;
+  const reload = () => { current.reload(); deleted.reload(); };
+  const trash = useTrash('/requests', reload);
+  const types = useFetch('/requests/types');
+  const [f, setF] = useState({ q: '', type: '' });
+  const rows = (data || []).filter((r) => matches(f.q, r.student?.name, r.student?.rollNo, r.details, r.remarks) && (!f.type || r.type === f.type));
   const [form, setForm] = useState(null);
   const [handle, setHandle] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -23,23 +32,36 @@ export default function Requests() {
     try { await api.put(`/requests/${handle._id}`, { status: s, remarks: handle.remarks }); toast(`Request ${s}`); setHandle(null); reload(); }
     catch (err) { errMsg(err); } finally { setBusy(false); }
   };
+  const remove = async (r) => {
+    if (!window.confirm(`Delete the ${r.type} request from ${r.student?.name}? You can restore it from the Deleted tab.`)) return;
+    await deleteWithRestore('/requests', r, 'Request deleted', reload);
+  };
 
   return (
     <>
       <PageHeader title={student ? 'My requests' : 'Service requests'}
         subtitle={student ? 'Certificates, ID cards and corrections.' : 'Requests raised by students.'}
         actions={student && <Button onClick={() => setForm({ type: types.data?.[0] || '', details: '' })}><Plus size={16} />New request</Button>} />
-      <Tabs tabs={[...(student ? [{ value: '', label: 'All' }] : []), { value: 'pending', label: 'Pending' }, { value: 'approved', label: 'Approved' }, { value: 'completed', label: 'Completed' }, { value: 'rejected', label: 'Rejected' }, ...(!student ? [{ value: '', label: 'All' }] : [])]}
+      <Tabs tabs={[...(student ? [{ value: '', label: 'All' }] : []), { value: 'pending', label: 'Pending' }, { value: 'approved', label: 'Approved' }, { value: 'completed', label: 'Completed' }, { value: 'rejected', label: 'Rejected' },
+        ...(!student ? [{ value: '', label: 'All' }] : []), ...(admin ? [{ value: 'deleted', label: 'Deleted' }] : [])]}
         value={status} onChange={setStatus} />
       <Card pad={false}>
+        <FilterBar>
+          <SearchBox placeholder={student ? 'Search in details or remarks' : 'Search by student, roll number, details or remarks'} value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} />
+          <FilterSelect label="Type" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} placeholder="All types" options={types.data || []} />
+        </FilterBar>
         {loading ? <Loading /> : (
-          <Table rows={data} empty={student ? 'You have not raised any requests' : 'No requests here'} columns={[
+          <Table rows={rows} empty={showDeleted ? 'No deleted requests' : data?.length ? 'No requests match these filters' : student ? 'You have not raised any requests' : 'No requests here'} columns={[
             ...(!student ? [{ label: 'Student', render: (r) => <><p className="font-medium">{r.student?.name}</p><p className="text-xs text-ink-faint">{r.student?.rollNo}</p></> }] : []),
             { label: 'Request', render: (r) => <><p className="font-medium">{r.type}</p><p className="line-clamp-2 max-w-md text-sm text-ink-soft">{r.details}</p></> },
             { label: 'Raised', render: (r) => fmtDate(r.createdAt) },
-            { label: 'Status', render: (r) => <StatusBadge status={r.status} /> },
+            { label: 'Status', render: (r) => (r.deletedAt ? <DeletedBadge item={r} /> : <StatusBadge status={r.status} />) },
             { label: 'Remarks', render: (r) => <span className="text-sm text-ink-soft">{r.remarks || '-'}</span> },
-            ...(!student ? [{ label: '', className: 'text-right', render: (r) => <Button size="sm" variant="secondary" onClick={() => setHandle({ ...r, remarks: r.remarks || '' })}>Update</Button> }] : []),
+            ...(!student ? [{ label: '', className: 'text-right', render: (r) => (r.deletedAt ? trash.actions(r, `the ${r.type} request from ${r.student?.name}`) : (
+              <div className="flex justify-end gap-1">
+                <Button size="sm" variant="secondary" onClick={() => setHandle({ ...r, remarks: r.remarks || '' })}>Update</Button>
+                {admin && <Button size="sm" variant="danger" onClick={() => remove(r)}>Delete</Button>}
+              </div>)) }] : []),
           ]} />
         )}
       </Card>

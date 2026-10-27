@@ -4,6 +4,7 @@ import Course from '../models/Course.js';
 import { ah, allow, HttpError } from '../middleware/auth.js';
 import { courseFor } from '../utils/access.js';
 import { dispatch, resolveRecipients } from '../utils/notify.js';
+import { trashRoutes } from '../utils/softDelete.js';
 
 const r = Router();
 
@@ -16,7 +17,24 @@ r.put('/templates/:id', allow('admin'), ah(async (req, res) => {
   if (!t) throw new HttpError(404, 'Template not found');
   res.json(t);
 }));
-r.delete('/templates/:id', allow('admin'), ah(async (req, res) => { await Template.findByIdAndDelete(req.params.id); res.json({ message: 'Template deleted' }); }));
+r.delete('/templates/:id', allow('admin'), ah(async (req, res) => {
+  const t = await Template.findById(req.params.id);
+  if (!t) throw new HttpError(404, 'Template not found');
+  await t.softDelete(req.user);
+  res.json({ message: 'Template deleted' });
+}));
+trashRoutes(r, Template, { base: '/templates', roles: ['admin'] });
+
+// Faculty see and manage only the messages they sent.
+const ownMessage = (req, m) => {
+  if (req.user.role === 'faculty' && String(m.sentBy?._id || m.sentBy) !== String(req.user._id)) throw new HttpError(403, 'Not your message');
+};
+trashRoutes(r, Message, {
+  roles: ['admin', 'staff', 'faculty'],
+  scope: (req) => (req.user.role === 'faculty' ? { sentBy: req.user._id } : {}),
+  populate: [['sentBy', 'name role'], ['audience.course', 'code name'], ['audience.users', 'name']],
+  check: async (req, m) => ownMessage(req, m),
+});
 
 // ---- Compose / send ----
 async function checkAudience(user, audience) {
@@ -57,10 +75,9 @@ r.get('/', allow('admin', 'staff', 'faculty'), ah(async (req, res) => {
 r.delete('/:id', allow('admin', 'staff', 'faculty'), ah(async (req, res) => {
   const m = await Message.findById(req.params.id);
   if (!m) throw new HttpError(404, 'Message not found');
-  if (m.status !== 'scheduled') throw new HttpError(400, 'Only scheduled messages can be cancelled');
-  if (req.user.role === 'faculty' && String(m.sentBy) !== String(req.user._id)) throw new HttpError(403, 'Not your message');
-  await m.deleteOne();
-  res.json({ message: 'Scheduled message cancelled' });
+  ownMessage(req, m);
+  await m.softDelete(req.user); // a deleted scheduled message is not sent unless restored
+  res.json({ message: m.status === 'scheduled' ? 'Scheduled message cancelled' : 'Message deleted' });
 }));
 
 // ---- Notifications (own inbox) ----

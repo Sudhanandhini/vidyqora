@@ -5,9 +5,18 @@ import { ah, allow, HttpError } from '../middleware/auth.js';
 import { courseFor, courseScope } from '../utils/access.js';
 import { upload, toFiles } from '../middleware/upload.js';
 import { notifyUsers } from '../utils/notify.js';
+import { trashRoutes } from '../utils/softDelete.js';
 
 const r = Router();
 const deadline = (a) => a.extendedDate || a.dueDate;
+
+trashRoutes(r, Assignment, {
+  roles: ['faculty', 'admin'],
+  scope: async (req) => ({ course: { $in: (await Course.find(courseScope(req.user)).select('_id').lean()).map((c) => c._id) } }),
+  populate: [['course', 'code name']],
+  check: (req, a) => courseFor(req.user, a.course),
+  onPurge: (a) => Submission.deleteMany({ assignment: a._id }),
+});
 
 r.get('/', ah(async (req, res) => {
   const courses = await Course.find(courseScope(req.user)).select('_id code name students').lean();
@@ -59,8 +68,7 @@ r.delete('/:id', allow('faculty', 'admin'), ah(async (req, res) => {
   const a = await Assignment.findById(req.params.id);
   if (!a) throw new HttpError(404, 'Assignment not found');
   await courseFor(req.user, a.course);
-  await Submission.deleteMany({ assignment: a._id });
-  await a.deleteOne();
+  await a.softDelete(req.user); // submissions are kept until the assignment is deleted permanently
   res.json({ message: 'Assignment deleted' });
 }));
 

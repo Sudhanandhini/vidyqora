@@ -4,8 +4,19 @@ import Course from '../models/Course.js';
 import { ah, allow, HttpError } from '../middleware/auth.js';
 import { courseFor } from '../utils/access.js';
 import { notifyUsers } from '../utils/notify.js';
+import { trashRoutes } from '../utils/softDelete.js';
 
 const r = Router();
+
+trashRoutes(r, Assessment, {
+  roles: ['faculty', 'admin'],
+  scope: async (req) => {
+    if (!req.query.course) throw new HttpError(400, 'Select a course');
+    await courseFor(req.user, req.query.course);
+    return { course: req.query.course };
+  },
+  check: (req, a) => courseFor(req.user, a.course),
+});
 
 r.get('/', allow('faculty', 'admin'), ah(async (req, res) => {
   if (!req.query.course) throw new HttpError(400, 'Select a course');
@@ -67,7 +78,7 @@ r.delete('/:id', allow('faculty', 'admin'), ah(async (req, res) => {
   if (!a) throw new HttpError(404, 'Assessment not found');
   await courseFor(req.user, a.course);
   if (a.status !== 'draft' && req.user.role !== 'admin') throw new HttpError(400, 'Only draft assessments can be deleted');
-  await a.deleteOne();
+  await a.softDelete(req.user);
   res.json({ message: 'Assessment deleted' });
 }));
 

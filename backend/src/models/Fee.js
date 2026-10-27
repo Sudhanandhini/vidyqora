@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import softDelete from '../utils/softDelete.js';
 
 const feeSchema = new mongoose.Schema({
   student: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -12,5 +13,7 @@ const feeSchema = new mongoose.Schema({
   txnId: String,
   receiptNo: String,
 }, { timestamps: true });
+
+feeSchema.plugin(softDelete);
 
 export default mongoose.model('Fee', feeSchema);

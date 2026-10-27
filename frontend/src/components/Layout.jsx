@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, BookOpen, CalendarCheck, ClipboardList, GraduationCap, CalendarDays,
-  Send, Wallet, FileQuestion, FileSpreadsheet, Bell, Menu, X, LogOut, UserCircle,
+  Send, Wallet, FileQuestion, FileSpreadsheet, Bell, Menu, X, LogOut, UserCircle, Settings2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
 
 const NAV = {
   admin: [
-    ['/', 'Dashboard', LayoutDashboard], ['/users', 'Users', Users], ['/courses', 'Courses', BookOpen],
+    ['/', 'Dashboard', LayoutDashboard], ['/users', 'Users', Users], ['/courses', 'Courses', BookOpen], ['/setup', 'Academic setup', Settings2],
     ['/calendar', 'Calendar', CalendarDays], ['/messaging', 'Messaging', Send], ['/fees', 'Fees', Wallet],
     ['/requests', 'Requests', FileQuestion], ['/reports', 'Reports', FileSpreadsheet],
   ],

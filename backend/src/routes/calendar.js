@@ -4,8 +4,10 @@ import Settings from '../models/Settings.js';
 import User from '../models/User.js';
 import { ah, allow, HttpError } from '../middleware/auth.js';
 import { notifyUsers } from '../utils/notify.js';
+import { trashRoutes } from '../utils/softDelete.js';
 
 const r = Router();
+trashRoutes(r, Event, { base: '/events', roles: ['admin', 'staff'] });
 
 r.get('/events', ah(async (req, res) => {
   const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 31 * 864e5);
@@ -35,7 +37,9 @@ r.put('/events/:id', allow('admin', 'staff'), ah(async (req, res) => {
 }));
 
 r.delete('/events/:id', allow('admin', 'staff'), ah(async (req, res) => {
-  await Event.findByIdAndDelete(req.params.id);
+  const ev = await Event.findById(req.params.id);
+  if (!ev) throw new HttpError(404, 'Event not found');
+  await ev.softDelete(req.user);
   res.json({ message: 'Event deleted' });
 }));
 

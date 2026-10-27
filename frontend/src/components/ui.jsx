@@ -19,14 +19,15 @@ export function useFetch(url, params) {
 }
 
 /* ---------- toast ---------- */
-export const toast = (message, tone = 'ok') => window.dispatchEvent(new CustomEvent('vq-toast', { detail: { message, tone } }));
+// `action` = { label, onClick } adds a button to the toast (e.g. Restore after a delete).
+export const toast = (message, tone = 'ok', action) => window.dispatchEvent(new CustomEvent('vq-toast', { detail: { message, tone, action } }));
 export function ToastHost() {
   const [items, setItems] = useState([]);
   useEffect(() => {
     const on = (e) => {
       const id = Math.random();
       setItems((x) => [...x, { id, ...e.detail }]);
-      setTimeout(() => setItems((x) => x.filter((i) => i.id !== id)), 3800);
+      setTimeout(() => setItems((x) => x.filter((i) => i.id !== id)), e.detail.action ? 8000 : 3800);
     };
     window.addEventListener('vq-toast', on);
     return () => window.removeEventListener('vq-toast', on);
@@ -34,8 +35,12 @@ export function ToastHost() {
   return (
     <div className="fixed bottom-4 right-4 z-[60] flex w-[min(92vw,360px)] flex-col gap-2" role="status" aria-live="polite">
       {items.map((t) => (
-        <div key={t.id} className={`rounded-md border-l-4 bg-white px-4 py-3 text-sm shadow-lg ${t.tone === 'error' ? 'border-red-600 text-red-800' : 'border-sand-400 text-primary'}`}>
-          {t.message}
+        <div key={t.id} className={`flex items-center justify-between gap-3 rounded-md border-l-4 bg-white px-4 py-3 text-sm shadow-lg ${t.tone === 'error' ? 'border-red-600 text-red-800' : 'border-sand-400 text-primary'}`}>
+          <span>{t.message}</span>
+          {t.action && (
+            <button className="shrink-0 rounded px-2 py-1 font-semibold text-primary underline-offset-2 hover:bg-primary-50 hover:underline"
+              onClick={() => { setItems((x) => x.filter((i) => i.id !== t.id)); t.action.onClick(); }}>{t.action.label}</button>
+          )}
         </div>
       ))}
     </div>
@@ -70,6 +75,13 @@ export const Select = ({ options = [], placeholder, ...p }) => (
     {placeholder !== undefined && <option value="">{placeholder}</option>}
     {options.map((o) => (typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.value} value={o.value}>{o.label}</option>))}
   </select>
+);
+
+// Level / department / program / batch / section / semester lists managed by admin under Academic setup.
+export const useMasters = () => useFetch('/masters').data || { levels: [], departments: [], programs: [], batches: [], sections: [], semesters: [] };
+// Dropdown over a master list; keeps an existing value selectable even if it was removed from the list.
+export const MasterSelect = ({ list = [], value, placeholder = 'Select', ...p }) => (
+  <Select {...p} value={value || ''} placeholder={placeholder} options={value && !list.includes(value) ? [value, ...list] : list} />
 );
 
 export function PageHeader({ title, subtitle, actions }) {

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import softDelete from '../utils/softDelete.js';
 
 const eventSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true },
@@ -12,5 +13,7 @@ const eventSchema = new mongoose.Schema({
 
 /** Audiences a role may see. Admin and office staff manage the calendar, so they see every event. */
 export const audiencesFor = (role) => (role === 'faculty' ? ['all', 'faculty'] : role === 'student' ? ['all', 'student'] : ['all', 'faculty', 'student', 'staff']);
+
+eventSchema.plugin(softDelete);
 
 export default mongoose.model('Event', eventSchema);

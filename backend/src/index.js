@@ -24,6 +24,7 @@ import fees from './routes/fees.js';
 import requests from './routes/requests.js';
 import dashboard from './routes/dashboard.js';
 import reports from './routes/reports.js';
+import masters from './routes/masters.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -50,6 +51,7 @@ app.use('/api/fees', protect, fees);
 app.use('/api/requests', protect, requests);
 app.use('/api/dashboard', protect, dashboard);
 app.use('/api/reports', protect, reports);
+app.use('/api/masters', protect, masters);
 app.use('/api', notFound);
 
 // Serve the built client (single deployment, e.g. cPanel Node.js app)

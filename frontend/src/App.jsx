@@ -16,6 +16,7 @@ import Fees from './pages/Fees';
 import Requests from './pages/Requests';
 import Reports from './pages/Reports';
 import Profile from './pages/Profile';
+import Setup from './pages/Setup';
 
 function Guard({ roles, children }) {
   const { user } = useAuth();
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="requests" element={<Guard roles={['admin', 'staff', 'student']}><Requests /></Guard>} />
         <Route path="reports" element={<Reports />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="setup" element={<Guard roles={['admin']}><Setup /></Guard>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

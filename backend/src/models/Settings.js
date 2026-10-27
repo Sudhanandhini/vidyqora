@@ -6,6 +6,13 @@ const settingsSchema = new mongoose.Schema({
   academicYear: { start: Date, end: Date, label: String },
   weeklyOffs: { type: [Number], default: [0] },
   sessions: [{ _id: false, name: String, start: String, end: String, isBreak: Boolean }],
+  // Master lists shown as dropdowns in course, user and fee forms
+  levels: { type: [String], default: [] },
+  departments: { type: [String], default: [] },
+  programs: { type: [String], default: [] },
+  batches: { type: [String], default: [] },
+  sections: { type: [String], default: [] },
+  semesters: { type: [String], default: [] },
 }, { timestamps: true });
 
 settingsSchema.statics.getMain = async function getMain() {

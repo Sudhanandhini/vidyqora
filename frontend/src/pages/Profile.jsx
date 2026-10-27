@@ -2,6 +2,7 @@ import { useState } from 'react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, Card, Field, Input, Button, toast, errMsg } from '../components/ui';
+import { PhoneInput } from '../components/listTools';
 
 export default function Profile() {
   const { user, setUser } = useAuth();
@@ -36,7 +37,7 @@ export default function Profile() {
             {rows.map(([k, v]) => <div key={k} className="grid grid-cols-[140px_1fr] py-2"><dt className="text-ink-soft">{k}</dt><dd>{v}</dd></div>)}
           </dl>
           <div className="mt-4 flex items-end gap-3">
-            <Field label="Phone" className="flex-1"><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+            <Field label="Phone" className="flex-1"><PhoneInput value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
             <Button onClick={save} loading={busy === 'p'}>Save phone</Button>
           </div>
         </Card>
