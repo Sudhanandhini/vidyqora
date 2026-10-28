@@ -223,10 +223,10 @@ function StudentView() {
       </div>
       {!data.rows.length ? <Card><Empty title="No attendance recorded yet" hint="Attendance appears here once your faculty mark it." /></Card> : (
         <>
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {data.rows.map((r) => (
               <button key={r.course._id} onClick={() => setF({ ...f, course: f.course === r.course._id ? '' : r.course._id })}
-                className={`panel flex items-center gap-4 p-4 text-left transition hover:ring-2 hover:ring-primary-100 ${f.course === r.course._id ? 'ring-2 ring-primary' : ''}`}>
+                className={`panel flex min-w-0 items-center gap-4 p-4 text-left transition hover:ring-2 hover:ring-primary-100 ${f.course === r.course._id ? 'ring-2 ring-primary' : ''}`}>
                 <span className={`font-serif text-3xl font-semibold ${r.pct < 75 ? 'text-red-700' : 'text-primary'}`}>{r.pct}%</span>
                 <span className="min-w-0">
                   <span className="block font-semibold">{r.course.code}</span>

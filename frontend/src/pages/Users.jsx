@@ -3,10 +3,11 @@ import { Plus, RotateCcw, ArrowLeft } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useFetch, PageHeader, Card, Table, Button, Modal, Field, Input, Select, MasterSelect, useMasters, Badge, Tabs, Loading, toast, errMsg } from '../components/ui';
+import { FeeAssign, assignFees, feeNote } from '../components/FeeAssign';
 import { PhoneInput, NAME_PATTERN, FilterBar, SearchBox, FilterSelect, ACTIVE_OPTIONS, DeletedBadge, useTrash, deleteWithRestore, matches } from '../components/listTools';
 
 const ROLES = [{ value: 'student', label: 'Students' }, { value: 'faculty', label: 'Faculty' }, { value: 'staff', label: 'Office staff' }, { value: 'admin', label: 'Admins' }];
-const BLANK = { name: '', email: '', role: 'student', phone: '', department: '', designation: '', employeeId: '', rollNo: '', level: '', program: '', batch: '', section: '', semester: '', password: '' };
+const BLANK = { name: '', email: '', role: 'student', phone: '', department: '', designation: '', employeeId: '', rollNo: '', level: '', program: '', batch: '', section: '', semester: '', password: '', fees: [] };
 
 export default function Users() {
   const { user } = useAuth();
@@ -24,6 +25,9 @@ export default function Users() {
   const [busy, setBusy] = useState(false);
   const { data: myCourses } = useFetch(isFaculty ? '/courses' : null);
   const masters = useMasters();
+  // Admin assigns fees from the student form (faculty cannot create fees); on edit, show what the student already has.
+  const canFee = !isFaculty && edit?.role === 'student';
+  const studentFees = useFetch(canFee && edit?._id ? '/fees' : null, { student: edit?._id });
   // Count of deleted users in this tab, for the header "Restore deleted" button.
   const deletedCount = useFetch(isFaculty ? null : '/users/deleted', { role });
   const refresh = () => { reload(); deletedCount.reload(); };
@@ -39,11 +43,15 @@ export default function Users() {
     setBusy(true);
     try {
       if (isFaculty && !edit._id && !edit.courses.length) throw new Error('Select at least one of your courses for this student');
-      const body = { ...edit }; if (!body.password) delete body.password;
-      let enrolled = 0;
-      if (edit._id) await api.put(`/users/${edit._id}`, body); else ({ enrolled } = (await api.post('/users', body)).data);
+      const { fees, ...body } = edit; if (!body.password) delete body.password;
+      let enrolled = 0, id = edit._id;
+      if (edit._id) await api.put(`/users/${edit._id}`, body); else ({ enrolled, _id: id } = (await api.post('/users', body)).data);
       const enrolNote = isStudent && !edit._id ? ` Enrolled in ${enrolled} course${enrolled === 1 ? '' : 's'}.` : '';
-      toast(edit._id ? 'User updated' : `${isFaculty ? 'Student' : 'User'} added.${enrolNote}${edit.password ? '' : ' Temporary password: Welcome@123'}`);
+      let note = '';
+      if (canFee && fees.length) {
+        try { note = feeNote(await assignFees({ student: id }, fees)); } catch (err) { note = ` Fees were not assigned: ${err.message}`; }
+      }
+      toast(edit._id ? `User updated.${note}` : `${isFaculty ? 'Student' : 'User'} added.${enrolNote}${note}${edit.password ? '' : ' Temporary password: Welcome@123'}`);
       setEdit(null); reload();
     } catch (err) { errMsg(err); } finally { setBusy(false); }
   };
@@ -88,13 +96,15 @@ export default function Users() {
           <Table rows={rows} empty={isFaculty && !data?.length ? 'No students in your courses yet. Open My courses and use Students to add them.' : 'No users match these filters'} columns={[
             { label: 'Name', render: (u) => <><p className="font-medium">{u.name}</p><p className="text-xs text-ink-faint">{u.email}</p></> },
             { label: students ? 'Roll number' : 'Employee ID', render: (u) => u.rollNo || u.employeeId || '-' },
-            { label: students ? 'Batch / Section' : 'Department', render: (u) => (students ? [u.level, u.department, u.program, u.batch, u.section, u.semester].filter(Boolean).join(' / ') : u.department) || '-' },
+            { label: students ? 'Batch / Section' : 'Department', render: (u) => (!students ? u.department || '-' : [u.level, u.program, u.batch, u.section, u.semester, u.department].some(Boolean) ? <>
+              <p className="whitespace-nowrap">{[u.level, u.program, u.batch, u.section, u.semester].filter(Boolean).join(' / ')}</p>
+              {u.department && <p className="whitespace-nowrap text-xs text-ink-faint">{u.department}</p>}</> : '-') },
             isFaculty && { label: 'My courses', render: (u) => <div className="flex flex-wrap gap-1">{u.courses?.map((c) => <Badge key={c._id} tone="blue">{c.code}</Badge>)}</div> },
             { label: 'Phone', key: 'phone' },
             { label: 'Status', render: (u) => (u.deletedAt ? <DeletedBadge item={u} /> : <Badge tone={u.active ? 'green' : 'grey'}>{u.active ? 'Active' : 'Inactive'}</Badge>) },
             !isFaculty && { label: '', className: 'text-right', render: (u) => (u.deletedAt ? trash.actions(u, u.name) : (
               <div className="flex justify-end gap-1">
-                <Button size="sm" variant="ghost" onClick={() => setEdit({ ...BLANK, ...u, password: '' })}>Edit</Button>
+                <Button size="sm" variant="ghost" onClick={() => setEdit({ ...BLANK, ...u, password: '', fees: [] })}>Edit</Button>
                 <Button size="sm" variant="secondary" onClick={() => toggle(u)}>{u.active ? 'Deactivate' : 'Activate'}</Button>
                 {u._id !== user._id && <Button size="sm" variant="danger" onClick={() => remove(u)}>Delete</Button>}
               </div>)) },
@@ -131,6 +141,8 @@ export default function Users() {
                     </div>
                   </Field>
                 )}
+                {canFee && <FeeAssign rows={edit.fees} onChange={(fees) => setEdit({ ...edit, fees })} feeTypes={masters.feeTypes} existing={edit._id ? studentFees.data?.items : undefined}
+                  hint="Created for this student when you save. They appear under Fees as outstanding and the student is notified." />}
               </>
             ) : (
               <>

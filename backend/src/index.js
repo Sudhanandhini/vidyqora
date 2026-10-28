@@ -38,7 +38,10 @@ if (process.env.NODE_ENV !== 'production') app.use(morgan('dev'));
 app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d' }));
 app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'Vidyqora' }));
 
-app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 50 }), auth);
+// Brute-force guard on sign-in only: failed attempts count, successful logins and /auth/me (called on every page load) do not.
+app.use('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, skipSuccessfulRequests: true,
+  message: { message: 'Too many failed sign-in attempts. Please wait 15 minutes and try again.' } }));
+app.use('/api/auth', auth);
 app.use('/api/users', protect, users);
 app.use('/api/courses', protect, courses);
 app.use('/api/attendance', protect, attendance);

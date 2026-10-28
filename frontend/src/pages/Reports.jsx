@@ -14,6 +14,7 @@ const META = {
   'fee-collection': { name: 'Fee collection', desc: 'Payments received with mode, receipt and transaction details.', dates: true },
   'fee-dues': { name: 'Fee dues', desc: 'Outstanding fees with days overdue.' },
   'messages-sent': { name: 'Messages sent', desc: 'Messages with channels, recipients and status.', dates: true },
+  calendar: { name: 'Calendar', desc: 'Exams, events, holidays and other calendar entries with dates.', dates: true, kind: true },
   holidays: { name: 'Holiday list', desc: 'Declared holidays with dates and days.', dates: true },
   requests: { name: 'Service requests', desc: 'Requests raised with status and remarks.', dates: true },
   users: { name: 'User list', desc: 'Accounts with role, ID, batch and contact.', role: true },
@@ -21,7 +22,7 @@ const META = {
 
 function ReportCard({ type, courses }) {
   const m = META[type];
-  const [p, setP] = useState({ course: '', from: '', to: '', role: '' });
+  const [p, setP] = useState({ course: '', from: '', to: '', role: '', kind: '' });
   const [busy, setBusy] = useState(false);
   const run = async () => {
     if (m.course && !p.course) return toast('Select a course first', 'error');
@@ -38,8 +39,9 @@ function ReportCard({ type, courses }) {
           <p className="text-sm text-ink-soft">{m.desc}</p>
         </div>
       </div>
-      {(m.course || m.dates || m.role) && (
+      {(m.course || m.dates || m.role || m.kind) && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {m.kind && <Field label="Type" className="sm:col-span-2"><Select value={p.kind} onChange={(e) => setP({ ...p, kind: e.target.value })} placeholder="All types" options={[{ value: 'exam', label: 'Exam' }, { value: 'event', label: 'Event' }, { value: 'holiday', label: 'Holiday' }, { value: 'other', label: 'Other' }]} /></Field>}
           {m.course && <Field label="Course" className="sm:col-span-2"><Select value={p.course} onChange={(e) => setP({ ...p, course: e.target.value })} placeholder="Choose a course" options={(courses || []).map((c) => ({ value: c._id, label: `${c.code} ${c.name}` }))} /></Field>}
           {m.dates && <><Field label="From"><Input type="date" value={p.from} onChange={(e) => setP({ ...p, from: e.target.value })} /></Field><Field label="To"><Input type="date" value={p.to} onChange={(e) => setP({ ...p, to: e.target.value })} /></Field></>}
           {m.role && <Field label="Role" className="sm:col-span-2"><Select value={p.role} onChange={(e) => setP({ ...p, role: e.target.value })} placeholder="All roles" options={['student', 'faculty', 'staff', 'admin']} /></Field>}

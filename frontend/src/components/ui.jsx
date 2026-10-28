@@ -78,7 +78,7 @@ export const Select = ({ options = [], placeholder, ...p }) => (
 );
 
 // Level / department / program / batch / section / semester lists managed by admin under Academic setup.
-export const useMasters = () => useFetch('/masters').data || { levels: [], departments: [], programs: [], batches: [], sections: [], semesters: [] };
+export const useMasters = () => useFetch('/masters').data || { levels: [], departments: [], programs: [], batches: [], sections: [], semesters: [], feeTypes: [] };
 // Dropdown over a master list; keeps an existing value selectable even if it was removed from the list.
 export const MasterSelect = ({ list = [], value, placeholder = 'Select', ...p }) => (
   <Select {...p} value={value || ''} placeholder={placeholder} options={value && !list.includes(value) ? [value, ...list] : list} />

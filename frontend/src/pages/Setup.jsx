@@ -10,6 +10,7 @@ const LISTS = [
   { kind: 'batches', title: 'Batches', placeholder: '2024' },
   { kind: 'sections', title: 'Sections', placeholder: 'A' },
   { kind: 'semesters', title: 'Semesters', placeholder: '1' },
+  { kind: 'feeTypes', title: 'Fees', placeholder: 'Tuition fee' },
 ];
 
 function MasterList({ kind, title, placeholder, items, onChange }) {
@@ -67,7 +68,7 @@ export default function Setup() {
   const { data, loading, setData } = useFetch('/masters');
   return (
     <>
-      <PageHeader title="Academic setup" subtitle="Levels, departments, programs, batches, sections and semesters shown as choices in course, user and fee forms." />
+      <PageHeader title="Academic setup" subtitle="Levels, departments, programs, batches, sections, semesters and fee types shown as choices in course, user and fee forms." />
       {loading || !data ? <Loading /> : (
         <div className="grid gap-5 md:grid-cols-2">
           {LISTS.map((l) => <MasterList key={l.kind} {...l} items={data[l.kind]} onChange={setData} />)}

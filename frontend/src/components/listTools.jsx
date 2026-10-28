@@ -16,7 +16,7 @@ export const matches = (q, ...values) => !q.trim() || values.some((v) => v != nu
 /** Row of search box + dropdown filters above a table. */
 export const FilterBar = ({ children }) => <div className="flex flex-wrap items-center gap-2 border-b border-primary-50 p-4">{children}</div>;
 export const SearchBox = (p) => <Input type="search" className="!w-auto min-w-[16rem] flex-1 sm:max-w-md" {...p} />;
-export const FilterSelect = ({ label, ...p }) => <Select aria-label={label} className="!w-auto" {...p} />;
+export const FilterSelect = ({ label, ...p }) => <Select aria-label={label} className="!w-auto max-w-full" {...p} />;
 
 export const ACTIVE_OPTIONS = [{ value: 'true', label: 'Active' }, { value: 'false', label: 'Inactive' }, { value: 'deleted', label: 'Deleted' }];
 

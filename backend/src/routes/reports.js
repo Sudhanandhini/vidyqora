@@ -5,7 +5,7 @@ import Attendance, { PRESENT_CODES } from '../models/Attendance.js';
 import Assignment, { Submission } from '../models/Assignment.js';
 import Assessment from '../models/Assessment.js';
 import Fee from '../models/Fee.js';
-import Event from '../models/Event.js';
+import Event, { audiencesFor } from '../models/Event.js';
 import Request from '../models/Request.js';
 import { Message } from '../models/Messaging.js';
 import { ah, HttpError } from '../middleware/auth.js';
@@ -31,6 +31,7 @@ const ACCESS = {
   'fee-collection': ['admin', 'staff'],
   'fee-dues': ['admin', 'staff'],
   'messages-sent': ['admin', 'staff', 'faculty'],
+  'calendar': ['admin', 'staff', 'faculty', 'student'],
   'holidays': ['admin', 'staff', 'faculty', 'student'],
   'requests': ['admin', 'staff'],
   'users': ['admin'],
@@ -161,6 +162,21 @@ const handlers = {
       columns: [{ header: 'Date', key: 'date', width: 22 }, { header: 'Subject', key: 'subject', width: 30 }, { header: 'Channels', key: 'channels', width: 18 },
         { header: 'Audience', key: 'audience', width: 18 }, { header: 'Recipients', key: 'recipients', width: 11 }, { header: 'Status', key: 'status', width: 10 },
         { header: 'Sent By', key: 'by', width: 20 }], rows };
+  },
+
+  // Every calendar entry (exams, events, holidays, other) the user's role can see; `kind` narrows to one type.
+  async calendar(req) {
+    const f = { audience: { $in: audiencesFor(req.user.role) } };
+    if (req.query.kind) f.type = req.query.kind;
+    const dr = range(req.query); if (dr) f.start = dr;
+    const list = await Event.find(f).sort({ start: 1 }).lean();
+    const day = (d) => new Date(d).toLocaleDateString('en-IN', { weekday: 'long' });
+    const label = (t) => t[0].toUpperCase() + t.slice(1);
+    return { filename: `calendar${req.query.kind ? `-${req.query.kind}` : ''}`, title: req.query.kind ? `Calendar - ${label(req.query.kind)}` : 'Academic Calendar',
+      filters: [req.query.kind ? `Type: ${label(req.query.kind)}` : 'All types', dateLabel(req.query)].filter(Boolean).join(' · '),
+      columns: [{ header: 'From', key: 'from', width: 12 }, { header: 'To', key: 'to', width: 12 }, { header: 'Day', key: 'day', width: 12 },
+        { header: 'Type', key: 'type', width: 10 }, { header: 'Title', key: 'title', width: 32 }, { header: 'Description', key: 'desc', width: 40 }, { header: 'Applies To', key: 'aud', width: 12 }],
+      rows: list.map((e) => ({ from: fmtDate(e.start), to: fmtDate(e.end), day: day(e.start), type: label(e.type), title: e.title, desc: e.description || '', aud: e.audience })) };
   },
 
   async holidays(req) {

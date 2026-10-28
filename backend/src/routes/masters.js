@@ -2,11 +2,14 @@ import { Router } from 'express';
 import Settings from '../models/Settings.js';
 import Course from '../models/Course.js';
 import User from '../models/User.js';
+import Fee from '../models/Fee.js';
 import { ah, allow, HttpError } from '../middleware/auth.js';
 
-// Levels (UG/PG), departments, programs, batches, sections and semesters kept on the main Settings document.
-// List name -> field on courses and users that holds the chosen value.
-const FIELD = { levels: 'level', departments: 'department', programs: 'program', batches: 'batch', sections: 'section', semesters: 'semester' };
+// Levels (UG/PG), departments, programs, batches, sections, semesters and fee types kept on the main Settings document.
+// List name -> the models and field that hold the chosen value, so a rename carries over to existing records.
+const academic = (f) => [[Course, f], [User, f]];
+const FIELD = { levels: academic('level'), departments: academic('department'), programs: academic('program'), batches: academic('batch'),
+  sections: academic('section'), semesters: academic('semester'), feeTypes: [[Fee, 'title']] };
 const KINDS = Object.keys(FIELD);
 const r = Router();
 
@@ -30,7 +33,7 @@ r.post('/:kind', allow('admin'), ah(async (req, res) => {
   res.status(201).json(pick(s));
 }));
 
-// Rename a value and carry the change over to courses and users already using it.
+// Rename a value and carry the change over to the records already using it.
 r.put('/:kind/:name', allow('admin'), ah(async (req, res) => {
   const kind = kindOf(req.params.kind);
   const old = req.params.name;
@@ -42,8 +45,7 @@ r.put('/:kind/:name', allow('admin'), ah(async (req, res) => {
   s[kind].set(i, name);
   await s.save();
   if (name !== old) {
-    const f = FIELD[kind];
-    await Promise.all([Course.updateMany({ [f]: old }, { [f]: name }), User.updateMany({ [f]: old }, { [f]: name })]);
+    await Promise.all(FIELD[kind].map(([Model, f]) => Model.updateMany({ [f]: old }, { [f]: name })));
   }
   res.json(pick(s));
 }));

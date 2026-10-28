@@ -50,7 +50,8 @@ export default function Layout() {
     const poll = () => api.get('/notifications', { params: { limit: 1 } }).then((r) => alive && setUnread(r.data.unread)).catch(() => {});
     poll();
     const t = setInterval(poll, 60000);
-    return () => { alive = false; clearInterval(t); };
+    window.addEventListener('notifications:changed', poll);
+    return () => { alive = false; clearInterval(t); window.removeEventListener('notifications:changed', poll); };
   }, [loc.pathname]);
 
   const links = NAV[user.role] || [];
@@ -68,6 +69,7 @@ export default function Layout() {
               className={({ isActive }) => `flex items-center gap-3 rounded-md border-l-[3px] px-3 py-2 text-[14px] ${isActive
                 ? 'border-sand bg-primary-600 font-medium text-white' : 'border-transparent text-primary-200 hover:bg-primary-600/60 hover:text-white'}`}>
               <Icon size={17} strokeWidth={1.8} />{label}
+              {to === '/notifications' && unread > 0 && <span className="ml-auto min-w-[20px] rounded-full bg-sand px-1.5 text-center text-[11px] font-bold leading-5 text-primary">{unread > 99 ? '99+' : unread}</span>}
             </NavLink>
           ))}
         </nav>

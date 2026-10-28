@@ -13,6 +13,7 @@ const settingsSchema = new mongoose.Schema({
   batches: { type: [String], default: [] },
   sections: { type: [String], default: [] },
   semesters: { type: [String], default: [] },
+  feeTypes: { type: [String], default: [] }, // fee titles offered in the Add fee form
 }, { timestamps: true });
 
 settingsSchema.statics.getMain = async function getMain() {

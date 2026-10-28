@@ -24,18 +24,18 @@ function MonthGrid({ cursor, events, offs, onDay, onEvent }) {
   const today = isoDate();
   return (
     <div className="overflow-x-auto">
-      <div className="grid min-w-[700px] grid-cols-7 border-l border-t border-primary-100">
-        {DAYS.map((d, i) => <div key={d} className={`border-b-2 border-r border-b-sand-300 border-r-primary-100 bg-primary-50 px-2 py-2 text-[12.5px] font-semibold ${offs.includes(i) ? 'text-ink-faint' : 'text-primary'}`}>{d}</div>)}
+      <div className="grid grid-cols-7 sm:min-w-[700px] border-l border-t border-primary-100">
+        {DAYS.map((d, i) => <div key={d} className={`border-b-2 border-r border-b-sand-300 border-r-primary-100 bg-primary-50 px-1 py-2 text-[12px] font-semibold sm:px-2 sm:text-[12.5px] ${offs.includes(i) ? 'text-ink-faint' : 'text-primary'}`}>{d}</div>)}
         {cells.map((d) => {
           const inMonth = d.getMonth() === cursor.getMonth();
           const evs = events.filter((e) => sameDayOrIn(d, e));
           const off = offs.includes(d.getDay());
           return (
-            <div key={d.toISOString()} onClick={() => onDay(d)} className={`min-h-[104px] cursor-pointer border-b border-r border-primary-100 p-1.5 hover:bg-sand-50 ${off ? 'bg-canvas' : 'bg-white'} ${inMonth ? '' : 'opacity-45'}`}>
+            <div key={d.toISOString()} onClick={() => onDay(d)} className={`min-h-[64px] min-w-0 cursor-pointer border-b border-r border-primary-100 p-0.5 sm:min-h-[104px] sm:p-1.5 hover:bg-sand-50 ${off ? 'bg-canvas' : 'bg-white'} ${inMonth ? '' : 'opacity-45'}`}>
               <span className={`inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-1 text-[13px] ${isoDate(d) === today ? 'bg-primary font-semibold text-white' : 'text-ink-soft'}`}>{d.getDate()}</span>
               <div className="mt-1 space-y-1">
                 {evs.slice(0, 3).map((e) => (
-                  <button key={e._id} onClick={(x) => { x.stopPropagation(); onEvent(e); }} className={`block w-full truncate rounded px-1.5 py-0.5 text-left text-[12px] font-medium ${T[e.type].chip}`}>{e.title}</button>
+                  <button key={e._id} onClick={(x) => { x.stopPropagation(); onEvent(e); }} className={`block w-full truncate rounded px-1 py-0.5 text-left text-[10.5px] font-medium sm:px-1.5 sm:text-[12px] ${T[e.type].chip}`}>{e.title}</button>
                 ))}
                 {evs.length > 3 && <p className="px-1 text-[11px] text-ink-faint">+{evs.length - 3} more</p>}
               </div>
@@ -130,8 +130,8 @@ export default function Calendar() {
         </>} />
       {user.role === 'admin' && <Tabs tabs={[{ value: 'month', label: 'Calendar' }, { value: 'settings', label: 'Settings' }]} value={tab} onChange={setTab} />}
       {tab === 'settings' ? <Settings /> : (
-        <div className="grid gap-6 xl:grid-cols-[1fr_280px]">
-          <Card pad={false}>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
+          <Card pad={false} className="min-w-0">
             <div className="flex items-center justify-between px-4 py-3">
               <h2 className="text-xl font-semibold">{monthName}</h2>
               <div className="flex gap-1">

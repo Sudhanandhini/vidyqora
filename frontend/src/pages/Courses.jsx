@@ -3,6 +3,7 @@ import { Plus, Trash2, UserPlus, X } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { FilterBar, SearchBox, FilterSelect, DeletedBadge, useTrash, deleteWithRestore, matches } from '../components/listTools';
+import { FeeAssign, assignFees, feeNote } from '../components/FeeAssign';
 import { DEFAULT_SCHEME, PAPER_TYPES, schemeOf, schemeTotal, schemeText } from '../components/syllabus';
 import { useFetch, PageHeader, Card, Table, Button, Modal, Field, Input, Select, MasterSelect, useMasters, Tabs, Loading, Empty, isoDate, fmtDate, toast, errMsg } from '../components/ui';
 
@@ -24,6 +25,7 @@ function SchemeEditor({ value, onChange }) {
           <button type="button" onClick={() => onChange(value.filter((_, j) => j !== i))} disabled={value.length === 1} className="p-1 text-ink-faint hover:text-red-700 disabled:opacity-30" aria-label="Remove part"><X size={14} /></button>
         </div>
       ))}
+      
       <div className="flex items-center justify-between">
         <Button type="button" size="sm" variant="ghost" onClick={() => onChange([...value, { key: '', label: '', max: 10 }])}><Plus size={13} />Add part</Button>
         <span className="text-sm">Sub-total <b>{schemeTotal(value)}</b></span>
@@ -242,9 +244,14 @@ export default function Courses() {
   const save = async (e) => {
     e.preventDefault(); setBusy(true);
     try {
-      if (edit._id) await api.put(`/courses/${edit._id}`, { ...edit, reenrol: edit.reenrol });
-      else await api.post('/courses', edit);
-      toast(edit._id ? 'Course updated' : 'Course created'); setEdit(null); reload();
+      const { fees = [], ...body } = edit;
+      const { data: saved } = edit._id ? await api.put(`/courses/${edit._id}`, { ...body, reenrol: edit.reenrol }) : await api.post('/courses', body);
+      let note = '';
+      if (fees.length) {
+        if (!saved.students?.length) note = ' No students are enrolled yet, so no fees were assigned.';
+        else try { note = feeNote(await assignFees({ course: saved._id }, fees)); } catch (err) { note = ` Fees were not assigned: ${err.message}`; }
+      }
+      toast(`${edit._id ? 'Course updated' : 'Course created'}.${note}`); setEdit(null); reload();
     } catch (err) { errMsg(err); } finally { setBusy(false); }
   };
   const remove = async (c) => {
@@ -269,8 +276,9 @@ export default function Courses() {
         {loading ? <Loading /> : mode === 'syllabus' ? <div className="p-4"><SyllabusView courses={rows} /></div> : (
           <Table rows={rows} empty={show === 'deleted' ? 'No deleted courses' : data?.length ? 'No courses match these filters' : admin ? 'No courses yet. Add the first one.' : 'No courses assigned yet'} columns={[
             { label: 'Course', render: (c) => <><p className="font-medium">{c.code} {c.deletedAt && <DeletedBadge item={c} />}</p><p className="text-sm text-ink-soft">{c.name}</p></> },
-            { label: 'Batch / Section', render: (c) => [c.level, c.program, c.batch, c.section, c.semester].filter(Boolean).join(' / ') || '-' },
-            { label: 'Paper / Scheme', render: (c) => <><p>{c.type === 'sessional' ? 'Sessional' : 'Theory'} · L-T-P {c.lectures ?? 0}-{c.tutorials ?? 0}-{c.practicals ?? 0} · {c.credits ?? 0} cr</p><p className="text-xs text-ink-faint">{schemeText(c)}</p></> },
+            // Short unbreakable lines, so narrow screens don't wrap these after every word.
+            { label: 'Batch / Section', render: (c) => (groupOf(c) ? <><p className="whitespace-nowrap">{[c.level, c.program].filter(Boolean).join(' / ')}</p><p className="whitespace-nowrap text-xs text-ink-soft">{[c.batch, c.section, c.semester].filter(Boolean).join(' / ')}</p></> : '-') },
+            { label: 'Paper / Scheme', render: (c) => <><p className="whitespace-nowrap">{c.type === 'sessional' ? 'Sessional' : 'Theory'} · {c.credits ?? 0} cr</p><p className="whitespace-nowrap text-xs text-ink-soft">L-T-P {c.lectures ?? 0}-{c.tutorials ?? 0}-{c.practicals ?? 0}</p><p className="whitespace-nowrap text-xs text-ink-faint">{schemeText(c)}</p></> },
             { label: 'Faculty', render: (c) => c.faculty?.name || '-' },
             { label: 'Students', render: (c) => c.studentCount ?? c.students?.length ?? 0 },
             { label: 'Syllabus', render: (c) => (c.deletedAt ? '-' : (
@@ -279,7 +287,7 @@ export default function Courses() {
               <div className="flex justify-end gap-1">
                 <Button size="sm" variant="ghost" onClick={() => setView({ id: c._id })}>{user.role === 'faculty' ? 'Lesson plan' : 'View'}</Button>
                 {user.role !== 'student' && <Button size="sm" variant="secondary" onClick={() => setView({ id: c._id, add: true })}><UserPlus size={14} />Students</Button>}
-                {admin && <Button size="sm" variant="ghost" onClick={() => setEdit({ ...BLANK, ...c, evaluation: schemeOf(c), faculty: c.faculty?._id || '' })}>Edit</Button>}
+                {admin && <Button size="sm" variant="ghost" onClick={() => setEdit({ ...BLANK, ...c, evaluation: schemeOf(c), faculty: c.faculty?._id || '', fees: [] })}>Edit</Button>}
                 {admin && <Button size="sm" variant="danger" onClick={() => remove(c)}>Delete</Button>}
               </div>)) },
           ]} />
@@ -323,6 +331,8 @@ export default function Courses() {
                 Re-enrol students from this batch and section
               </label>
             )}
+            <FeeAssign rows={edit.fees || []} onChange={(fees) => setEdit({ ...edit, fees })} feeTypes={masters.feeTypes}
+              hint="Created for every student enrolled in this course when you save (e.g. a lab or course fee). Students who already have the same fee and term are skipped." />
           </form>
         )}
       </Modal>
