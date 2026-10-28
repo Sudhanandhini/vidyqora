@@ -155,6 +155,16 @@ function MarkSheet({ course, assessments, reload }) {
       reload();
     } catch (e) { errMsg(e); } finally { setBusy(''); }
   };
+  const published = visible.filter((c) => c.a?.status === 'published');
+  const unpublish = async () => {
+    if (!window.confirm(`Unpublish ${published.map((c) => c.name).join(', ')}? Students will no longer see these results.`)) return;
+    setBusy('unpublish');
+    try {
+      for (const c of published) await api.put(`/assessments/${c.a._id}/unpublish`);
+      toast('Results unpublished. Students can no longer see them.');
+      reload();
+    } catch (e) { errMsg(e); } finally { setBusy(''); }
+  };
   const addTest = async (e) => {
     e.preventDefault();
     if (passWrong(newTest.passMarks, newTest.maxMarks)) { errMsg({ message: `Pass mark must be between 0 and ${newTest.maxMarks}` }); return; }
@@ -264,6 +274,14 @@ function MarkSheet({ course, assessments, reload }) {
                 className={`-mb-px rounded-t-md border px-3 py-2 text-[13.5px] font-medium ${current === t.value ? 'border-primary-100 border-b-white bg-white text-primary' : 'border-transparent text-ink-soft hover:text-primary'}`}>{t.label}</button>
             ))}
           </div>
+          <dl className="grid gap-x-6 gap-y-2 border-b border-primary-50 bg-canvas/60 px-4 py-3 text-[12.5px] sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              ['Save marks', 'Keeps your entries as a draft. Students cannot see them and you can keep editing.'],
+              ['Submit for verification', 'Sends the marks to the admin to check. Students still cannot see them.'],
+              ['Unpublish results', 'Shown once results are published. Hides them from students and returns them to draft so you can correct them.'],
+              ['Publish results', 'Releases the results to students and notifies them. Marks are locked after this.'],
+            ].map(([t, d]) => <div key={t}><dt className="font-semibold text-primary">{t}</dt><dd className="text-ink-soft">{d}</dd></div>)}
+          </dl>
           {current === test?.key && <TestSummary test={test} students={course.students} valOf={valOf} result={testResult} onDelete={() => removeTest(test)} />}
           <Table rows={rows} empty="No students match this search" columns={[
             { label: 'Roll number', key: 'rollNo' },
@@ -289,6 +307,7 @@ function MarkSheet({ course, assessments, reload }) {
             </span>
             <Button variant="secondary" onClick={() => save()} loading={busy === 'save'} disabled={errors > 0}>Save marks</Button>
             <Button variant="secondary" onClick={() => save('submitted')} loading={busy === 'submitted'} disabled={errors > 0}>Submit for verification</Button>
+            {published.length > 0 && <Button variant="danger" onClick={unpublish} loading={busy === 'unpublish'}>Unpublish results</Button>}
             <Button onClick={() => { if (window.confirm('Publish these results to students?')) save('published'); }} loading={busy === 'published'} disabled={errors > 0}>Publish results</Button>
           </div>
         </>

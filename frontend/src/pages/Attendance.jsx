@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
-import { useFetch, PageHeader, Card, Table, Button, Field, Input, Select, Loading, Empty, Badge, Tabs, fmtDate, isoDate, toast, errMsg } from '../components/ui';
+import { useFetch, PageHeader, Card, Button, Field, Input, Select, Loading, Empty, Badge, Tabs, isoDate, toast, errMsg } from '../components/ui';
 
 // `present` mirrors PRESENT_CODES in backend/src/models/Attendance.js
 const CODES = [
@@ -201,7 +201,20 @@ function StudentView() {
   const log = useFetch('/attendance/my/log', { course: f.course, from: f.from, to: f.to });
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   if (loading) return <Loading />;
-  const rows = (log.data || []).filter((d) => !f.status || d.status === f.status);
+  const entries = log.data || [];
+  const shown = entries.filter((d) => !f.status || d.status === f.status);
+  // Same layout as the faculty register: courses down the side, one column per class (date + period), oldest first.
+  const colKey = (d) => `${isoDate(d.date)}|${d.period}`;
+  const sessions = [...new Map(shown.map((d) => [colKey(d), { key: colKey(d), date: d.date, period: d.period }])).values()]
+    .sort((x, y) => (x.key < y.key ? -1 : 1));
+  const sameDay = (i) => i > 0 && isoDate(sessions[i - 1].date) === isoDate(sessions[i].date);
+  const courseRows = data?.rows.filter((r) => !f.course || r.course._id === f.course).map((r) => {
+    const mine = entries.filter((d) => d.course._id === r.course._id);
+    const present = mine.filter((d) => CODES.find((x) => x.v === d.status)?.present).length;
+    return { ...r, cells: new Map(shown.filter((d) => d.course._id === r.course._id).map((d) => [colKey(d), d])), present, total: mine.length, pct: mine.length ? Math.round((present / mine.length) * 100) : null };
+  }) || [];
+  const th = 'border-b-2 border-sand-300 bg-primary-50 px-2 py-2 text-[12px] font-semibold text-primary';
+  const sticky = 'sticky z-10 bg-white';
   return (
     <>
       <div className="mb-5 flex items-baseline gap-3">
@@ -231,15 +244,55 @@ function StudentView() {
               <Field label="To"><Input type="date" value={f.to} min={f.from || undefined} onChange={set('to')} /></Field>
               {(f.course || f.status || f.from || f.to) && <Button size="sm" variant="ghost" className="mb-1" onClick={() => setF({ course: '', status: '', from: '', to: '' })}>Clear</Button>}
             </div>
-            {log.loading ? <Loading /> : (
-              <Table rows={rows} empty="No classes match these filters" columns={[
-                { label: 'Date', render: (d) => <span className="whitespace-nowrap font-medium">{fmtDate(d.date)}<span className="block text-xs font-normal text-ink-faint">{new Date(d.date).toLocaleDateString('en-IN', { weekday: 'long' })}</span></span> },
-                { label: 'Period', render: (d) => `Period ${d.period}` },
-                { label: 'Course', render: (d) => <><p className="font-medium">{d.course.code}</p><p className="text-xs text-ink-faint">{d.course.name}</p></> },
-                { label: 'Faculty', render: (d) => d.faculty || '-' },
-                { label: 'Topic', render: (d) => <span className="text-sm text-ink-soft">{d.topic || '-'}</span> },
-                { label: 'Status', render: (d) => { const c = CODES.find((x) => x.v === d.status); return c ? <span title={c.desc} className={`inline-flex h-6 items-center rounded px-2 text-[12px] font-semibold ${c.cls}`}>{c.v} · {c.label}</span> : '-'; } },
-              ]} />
+            {log.loading ? <Loading /> : !sessions.length ? <Empty title="No classes match these filters" /> : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-[13.5px]">
+                    <thead>
+                      <tr>
+                        <th className={`${th} ${sticky} left-0 min-w-[200px] border-r border-r-primary-100 text-left`}>Course</th>
+                        {sessions.map((s, i) => (
+                          <th key={s.key} className={`${th} min-w-[46px] text-center ${sameDay(i) ? '' : 'border-l border-l-primary-100'}`}>
+                            {sameDay(i) ? <span className="block text-[11px] text-ink-faint">&nbsp;</span>
+                              : <span className="block whitespace-nowrap">{new Date(s.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>}
+                            <span className="block text-[10.5px] font-normal text-ink-faint">P{s.period}</span>
+                          </th>
+                        ))}
+                        <th className={`${th} border-l border-l-primary-100 text-center`}>Present</th>
+                        <th className={`${th} text-center`}>Classes</th>
+                        <th className={`${th} text-center`}>%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {courseRows.map((r) => (
+                        <tr key={r.course._id} className="border-b border-primary-50 hover:bg-sand-50">
+                          <td className={`${sticky} left-0 border-r border-primary-100 px-2 py-1.5`}>
+                            <p className="font-medium">{r.course.code}</p>
+                            <p className="max-w-[200px] truncate text-xs text-ink-faint">{r.course.name}</p>
+                          </td>
+                          {sessions.map((s, i) => {
+                            const d = r.cells.get(s.key);
+                            const code = d && CODES.find((x) => x.v === d.status);
+                            return (
+                              <td key={s.key} className={`px-1 py-1.5 text-center ${sameDay(i) ? '' : 'border-l border-primary-50'}`}>
+                                {code ? <span title={[code.label, d.faculty, d.topic && `Topic: ${d.topic}`].filter(Boolean).join(' · ')} className={`inline-flex h-6 min-w-[30px] items-center justify-center rounded px-1 text-[11.5px] font-semibold ${code.cls}`}>{code.v}</span>
+                                  : <span className="text-ink-faint">{d ? '·' : ''}</span>}
+                              </td>
+                            );
+                          })}
+                          <td className="border-l border-primary-100 px-2 text-center font-semibold">{r.present}</td>
+                          <td className="px-2 text-center">{r.total}</td>
+                          <td className="px-2 text-center">{r.pct == null ? '-' : <Badge tone={r.pct < 75 ? 'red' : 'green'}>{r.pct}%</Badge>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex flex-wrap gap-3 border-t border-primary-50 px-4 py-3 text-[12.5px] text-ink-soft">
+                  {CODES.map((c) => <span key={c.v} className="flex items-center gap-1.5"><span className={`inline-flex h-5 min-w-[26px] items-center justify-center rounded px-1 text-[11px] font-semibold ${c.cls}`}>{c.v}</span>{c.label}</span>)}
+                  <span className="ml-auto">Hover a code for faculty and topic. Below 75% is shown in red.</span>
+                </div>
+              </>
             )}
           </Card>
         </>

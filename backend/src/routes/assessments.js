@@ -87,6 +87,18 @@ r.put('/:id/marks', allow('faculty', 'admin'), ah(async (req, res) => {
   res.json(a);
 }));
 
+// Take a published result back: students stop seeing it (every student view lists only 'published'),
+// and it returns to draft so the faculty can correct the marks and publish again.
+r.put('/:id/unpublish', allow('faculty', 'admin'), ah(async (req, res) => {
+  const a = await Assessment.findById(req.params.id);
+  if (!a) throw new HttpError(404, 'Assessment not found');
+  await courseFor(req.user, a.course);
+  if (a.status !== 'published') throw new HttpError(400, `${a.name} is not published`);
+  a.status = 'draft';
+  await a.save();
+  res.json(a);
+}));
+
 // Rename / change the maximum or date of an extra test. Scheme parts (MSE, ESE...) change through PUT /courses/:id/marking.
 r.put('/:id', allow('faculty', 'admin'), ah(async (req, res) => {
   const a = await Assessment.findById(req.params.id);

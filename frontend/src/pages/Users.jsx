@@ -14,7 +14,7 @@ export default function Users() {
   const [role, setRole] = useState('student');
   const [q, setQ] = useState('');
   const [active, setActive] = useState('');
-  // Students filter by level/program/batch/section/semester; other roles by department.
+  // Students filter by level/department/program/batch/section/semester; other roles by department.
   const NO_FILTERS = { level: '', program: '', batch: '', section: '', semester: '', department: '' };
   const [filters, setFilters] = useState(NO_FILTERS);
   const setFilter = (k) => (e) => setFilters({ ...filters, [k]: e.target.value });
@@ -76,6 +76,7 @@ export default function Users() {
           <FilterSelect label="Status" value={active} onChange={(e) => setActive(e.target.value)} placeholder="All statuses" options={isFaculty ? ACTIVE_OPTIONS.slice(0, 2) : ACTIVE_OPTIONS} />
           {students ? <>
             <FilterSelect label="Level" value={filters.level} onChange={setFilter('level')} placeholder="All levels" options={masters.levels} />
+            <FilterSelect label="Department" value={filters.department} onChange={setFilter('department')} placeholder="All departments" options={masters.departments} />
             <FilterSelect label="Program" value={filters.program} onChange={setFilter('program')} placeholder="All programs" options={masters.programs} />
             <FilterSelect label="Batch" value={filters.batch} onChange={setFilter('batch')} placeholder="All batches" options={masters.batches} />
             <FilterSelect label="Section" value={filters.section} onChange={setFilter('section')} placeholder="All sections" options={masters.sections} />
@@ -87,7 +88,7 @@ export default function Users() {
           <Table rows={rows} empty={isFaculty && !data?.length ? 'No students in your courses yet. Open My courses and use Students to add them.' : 'No users match these filters'} columns={[
             { label: 'Name', render: (u) => <><p className="font-medium">{u.name}</p><p className="text-xs text-ink-faint">{u.email}</p></> },
             { label: students ? 'Roll number' : 'Employee ID', render: (u) => u.rollNo || u.employeeId || '-' },
-            { label: students ? 'Batch / Section' : 'Department', render: (u) => (students ? [u.level, u.program, u.batch, u.section, u.semester].filter(Boolean).join(' / ') : u.department) || '-' },
+            { label: students ? 'Batch / Section' : 'Department', render: (u) => (students ? [u.level, u.department, u.program, u.batch, u.section, u.semester].filter(Boolean).join(' / ') : u.department) || '-' },
             isFaculty && { label: 'My courses', render: (u) => <div className="flex flex-wrap gap-1">{u.courses?.map((c) => <Badge key={c._id} tone="blue">{c.code}</Badge>)}</div> },
             { label: 'Phone', key: 'phone' },
             { label: 'Status', render: (u) => (u.deletedAt ? <DeletedBadge item={u} /> : <Badge tone={u.active ? 'green' : 'grey'}>{u.active ? 'Active' : 'Inactive'}</Badge>) },
@@ -113,6 +114,7 @@ export default function Users() {
               <>
                 <Field label="Roll number"><Input required value={edit.rollNo} onChange={set('rollNo')} /></Field>
                 <Field label="Level"><MasterSelect list={masters.levels} value={edit.level} onChange={set('level')} /></Field>
+                <Field label="Department"><MasterSelect list={masters.departments} value={edit.department} onChange={set('department')} /></Field>
                 <Field label="Program"><MasterSelect list={masters.programs} value={edit.program} onChange={set('program')} /></Field>
                 <Field label="Batch"><MasterSelect list={masters.batches} value={edit.batch} onChange={set('batch')} /></Field>
                 <Field label="Section"><MasterSelect list={masters.sections} value={edit.section} onChange={set('section')} /></Field>
