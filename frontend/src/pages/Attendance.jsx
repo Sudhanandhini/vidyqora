@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
-import { useFetch, usePaged, Pagination, PageHeader, Card, Table, Button, Field, Input, Select, Loading, Empty, Badge, Modal, Tabs, fmtDate, isoDate, toast, errMsg } from '../components/ui';
+import { useFetch, PageHeader, Card, Table, Button, Field, Input, Select, Loading, Empty, Badge, Tabs, fmtDate, isoDate, toast, errMsg } from '../components/ui';
 
 // `present` mirrors PRESENT_CODES in backend/src/models/Attendance.js
 const CODES = [
@@ -115,65 +115,135 @@ function MarkAttendance() {
   );
 }
 
+const CODE = Object.fromEntries(CODES.map((c) => [c.v, c]));
+const monthStart = () => { const d = new Date(); return isoDate(new Date(d.getFullYear(), d.getMonth(), 1)); };
+
+/** Date-wise register: students down the side, one column per class held (date + period), code in each cell. */
 function Register() {
   const courses = useFetch('/courses');
   const [course, setCourse] = useState('');
+  const [range, setRange] = useState({ from: monthStart(), to: isoDate() });
   const id = course || courses.data?.[0]?._id;
-  const { data, loading } = useFetch(id ? `/attendance/course/${id}/summary` : null);
+  const { data, loading } = useFetch(id ? `/attendance/course/${id}/summary` : null, range);
   if (courses.loading) return <Loading />;
+  const sessions = data?.sessionList || [];
+  const sameDay = (i) => i > 0 && isoDate(sessions[i - 1].date) === isoDate(sessions[i].date);
+  const th = 'border-b-2 border-sand-300 bg-primary-50 px-2 py-2 text-[12px] font-semibold text-primary';
+  const sticky = 'sticky z-10 bg-white';
   return (
     <Card pad={false}>
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-primary-50 p-4">
+      <div className="flex flex-wrap items-end gap-3 border-b border-primary-50 p-4">
         <Field label="Course" className="w-full max-w-sm"><Select value={id || ''} onChange={(e) => setCourse(e.target.value)} options={(courses.data || []).map((c) => ({ value: c._id, label: `${c.code} ${c.name}` }))} /></Field>
-        {data && <p className="text-sm text-ink-soft">{data.sessions} sessions recorded</p>}
+        <Field label="From"><Input type="date" value={range.from} max={range.to || undefined} onChange={(e) => setRange({ ...range, from: e.target.value })} /></Field>
+        <Field label="To"><Input type="date" value={range.to} min={range.from || undefined} onChange={(e) => setRange({ ...range, to: e.target.value })} /></Field>
+        <Button size="sm" variant="ghost" className="mb-1" onClick={() => setRange({ from: '', to: '' })}>All dates</Button>
+        {data && <p className="mb-2 ml-auto text-sm text-ink-soft">{data.sessions} class{data.sessions === 1 ? '' : 'es'} in this period</p>}
       </div>
-      {loading || !data ? <Loading /> : (
-        <Table rows={data.rows} rowKey={(r) => r.student._id} columns={[
-          { label: 'Roll number', render: (r) => r.student.rollNo },
-          { label: 'Name', render: (r) => r.student.name },
-          { label: 'Present', key: 'present' }, { label: 'Sessions', key: 'total' },
-          { label: 'Attendance', render: (r) => (r.pct == null ? '-' : <Badge tone={r.pct < 75 ? 'red' : 'green'}>{r.pct}%</Badge>) },
-        ]} />
+      {loading || !data ? <Loading /> : !data.rows.length ? <Empty title="No students enrolled in this course" /> : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-[13.5px]">
+              <thead>
+                <tr>
+                  <th className={`${th} ${sticky} left-0 min-w-[96px] text-left`}>Roll no.</th>
+                  <th className={`${th} ${sticky} left-[96px] min-w-[150px] border-r border-r-primary-100 text-left`}>Name</th>
+                  {sessions.map((s, i) => (
+                    <th key={s._id} className={`${th} min-w-[46px] text-center ${sameDay(i) ? '' : 'border-l border-l-primary-100'}`} title={s.topic ? `Topic: ${s.topic}` : undefined}>
+                      {sameDay(i) ? <span className="block text-[11px] text-ink-faint">&nbsp;</span>
+                        : <span className="block whitespace-nowrap">{new Date(s.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>}
+                      <span className="block text-[10.5px] font-normal text-ink-faint">P{s.period}</span>
+                    </th>
+                  ))}
+                  {!sessions.length && <th className={`${th} text-left font-normal text-ink-faint`}>No classes marked in this period</th>}
+                  <th className={`${th} border-l border-l-primary-100 text-center`}>Present</th>
+                  <th className={`${th} text-center`}>Classes</th>
+                  <th className={`${th} text-center`}>%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map((r) => (
+                  <tr key={r.student._id} className="border-b border-primary-50 hover:bg-sand-50">
+                    <td className={`${sticky} left-0 px-2 py-1.5 text-ink-soft`}>{r.student.rollNo}</td>
+                    <td className={`${sticky} left-[96px] border-r border-primary-100 px-2 py-1.5 font-medium`}>{r.student.name}</td>
+                    {sessions.map((s, i) => {
+                      const code = r.codes?.[s._id];
+                      return (
+                        <td key={s._id} className={`px-1 py-1.5 text-center ${sameDay(i) ? '' : 'border-l border-primary-50'}`}>
+                          {code ? <span title={CODE[code]?.label} className={`inline-flex h-6 min-w-[30px] items-center justify-center rounded px-1 text-[11.5px] font-semibold ${CODE[code]?.cls}`}>{code}</span>
+                            : <span className="text-ink-faint" title="Not marked">·</span>}
+                        </td>
+                      );
+                    })}
+                    {!sessions.length && <td />}
+                    <td className="border-l border-primary-100 px-2 text-center font-semibold">{r.present}</td>
+                    <td className="px-2 text-center">{r.total}</td>
+                    <td className="px-2 text-center">{r.pct == null ? '-' : <Badge tone={r.pct < 75 ? 'red' : 'green'}>{r.pct}%</Badge>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-wrap gap-3 border-t border-primary-50 px-4 py-3 text-[12.5px] text-ink-soft">
+            {CODES.map((c) => <span key={c.v} className="flex items-center gap-1.5"><span className={`inline-flex h-5 min-w-[26px] items-center justify-center rounded px-1 text-[11px] font-semibold ${c.cls}`}>{c.v}</span>{c.label}</span>)}
+            <span className="flex items-center gap-1.5"><span className="font-semibold">·</span>Not marked</span>
+            <span className="ml-auto">Below 75% is shown in red.</span>
+          </div>
+        </>
       )}
     </Card>
   );
 }
 
+/** Student: course-wise percentages and the date-wise attendance each faculty marked. */
 function StudentView() {
   const { data, loading } = useFetch('/attendance/my');
-  const [log, setLog] = useState(null);
-  const logData = useFetch(log ? `/attendance/my/${log._id}` : null);
-  const logPaged = usePaged(logData.data, (d) => `${d.date}-${d.period}`);
+  const [f, setF] = useState({ course: '', status: '', from: '', to: '' });
+  const log = useFetch('/attendance/my/log', { course: f.course, from: f.from, to: f.to });
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   if (loading) return <Loading />;
+  const rows = (log.data || []).filter((d) => !f.status || d.status === f.status);
   return (
     <>
       <div className="mb-5 flex items-baseline gap-3">
         <span className={`font-serif text-4xl font-semibold ${data.overall != null && data.overall < 75 ? 'text-red-700' : 'text-primary'}`}>{data.overall ?? '-'}%</span>
         <span className="text-ink-soft">overall attendance. The minimum requirement is 75%.</span>
       </div>
-      <Card pad={false}>
-        <Table rows={data.rows} rowKey={(r) => r.course._id} empty="No attendance recorded yet" columns={[
-          { label: 'Course', render: (r) => <><p className="font-medium">{r.course.code}</p><p className="text-sm text-ink-soft">{r.course.name}</p></> },
-          { label: 'Present', key: 'present' }, { label: 'Sessions', key: 'total' },
-          { label: 'Attendance', render: (r) => <Badge tone={r.pct < 75 ? 'red' : 'green'}>{r.pct}%</Badge> },
-          { label: '', className: 'text-right', render: (r) => <Button size="sm" variant="ghost" onClick={() => setLog(r.course)}>Day-wise</Button> },
-        ]} />
-      </Card>
-      <Modal open={!!log} onClose={() => setLog(null)} title={log ? `${log.code} attendance` : ''}>
-        {logData.loading ? <Loading /> : (
-          <>
-          <ul className="divide-y divide-primary-50">
-            {logPaged.items.map((d, i) => (
-              <li key={i} className="flex items-center justify-between py-2">
-                <span>{fmtDate(d.date)} <span className="text-xs text-ink-faint">Period {d.period}{d.topic ? `, ${d.topic}` : ''}</span></span>
-                <Badge tone={d.status === 'A' ? 'red' : d.status === 'L' ? 'amber' : 'green'}>{CODES.find((c) => c.v === d.status)?.label}</Badge>
-              </li>
+      {!data.rows.length ? <Card><Empty title="No attendance recorded yet" hint="Attendance appears here once your faculty mark it." /></Card> : (
+        <>
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {data.rows.map((r) => (
+              <button key={r.course._id} onClick={() => setF({ ...f, course: f.course === r.course._id ? '' : r.course._id })}
+                className={`panel flex items-center gap-4 p-4 text-left transition hover:ring-2 hover:ring-primary-100 ${f.course === r.course._id ? 'ring-2 ring-primary' : ''}`}>
+                <span className={`font-serif text-3xl font-semibold ${r.pct < 75 ? 'text-red-700' : 'text-primary'}`}>{r.pct}%</span>
+                <span className="min-w-0">
+                  <span className="block font-semibold">{r.course.code}</span>
+                  <span className="block truncate text-sm text-ink-soft">{r.course.name}</span>
+                  <span className="block text-xs text-ink-faint">{r.course.faculty?.name || 'Faculty not assigned'} · {r.present} of {r.total} classes</span>
+                </span>
+              </button>
             ))}
-          </ul>
-          <Pagination paged={logPaged} className="-mx-5 -mb-5 mt-2" />
-          </>
-        )}
-      </Modal>
+          </div>
+          <Card pad={false} title="Date-wise attendance">
+            <div className="flex flex-wrap items-end gap-3 border-b border-primary-50 p-4">
+              <Field label="Course"><Select value={f.course} onChange={set('course')} placeholder="All courses" options={data.rows.map((r) => ({ value: r.course._id, label: `${r.course.code} ${r.course.name}` }))} /></Field>
+              <Field label="Status"><Select value={f.status} onChange={set('status')} placeholder="All" options={CODES.map((c) => ({ value: c.v, label: c.label }))} /></Field>
+              <Field label="From"><Input type="date" value={f.from} max={f.to || undefined} onChange={set('from')} /></Field>
+              <Field label="To"><Input type="date" value={f.to} min={f.from || undefined} onChange={set('to')} /></Field>
+              {(f.course || f.status || f.from || f.to) && <Button size="sm" variant="ghost" className="mb-1" onClick={() => setF({ course: '', status: '', from: '', to: '' })}>Clear</Button>}
+            </div>
+            {log.loading ? <Loading /> : (
+              <Table rows={rows} empty="No classes match these filters" columns={[
+                { label: 'Date', render: (d) => <span className="whitespace-nowrap font-medium">{fmtDate(d.date)}<span className="block text-xs font-normal text-ink-faint">{new Date(d.date).toLocaleDateString('en-IN', { weekday: 'long' })}</span></span> },
+                { label: 'Period', render: (d) => `Period ${d.period}` },
+                { label: 'Course', render: (d) => <><p className="font-medium">{d.course.code}</p><p className="text-xs text-ink-faint">{d.course.name}</p></> },
+                { label: 'Faculty', render: (d) => d.faculty || '-' },
+                { label: 'Topic', render: (d) => <span className="text-sm text-ink-soft">{d.topic || '-'}</span> },
+                { label: 'Status', render: (d) => { const c = CODES.find((x) => x.v === d.status); return c ? <span title={c.desc} className={`inline-flex h-6 items-center rounded px-2 text-[12px] font-semibold ${c.cls}`}>{c.v} · {c.label}</span> : '-'; } },
+              ]} />
+            )}
+          </Card>
+        </>
+      )}
     </>
   );
 }
@@ -185,7 +255,7 @@ export default function Attendance() {
   return (
     <>
       <PageHeader title="Attendance" subtitle="Mark period-wise attendance. Absent students are notified." />
-      <Tabs tabs={[{ value: 'mark', label: 'Mark attendance' }, { value: 'register', label: 'Register summary' }]} value={tab} onChange={setTab} />
+      <Tabs tabs={[{ value: 'mark', label: 'Mark attendance' }, { value: 'register', label: 'Date-wise register' }]} value={tab} onChange={setTab} />
       {tab === 'mark' ? <MarkAttendance /> : <Register />}
     </>
   );

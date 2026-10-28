@@ -4,7 +4,7 @@ import { HttpError } from '../middleware/auth.js';
 /** Load a course and ensure the user may work with it. */
 export async function courseFor(user, courseId, { populate = false } = {}) {
   let q = Course.findById(courseId);
-  if (populate) q = q.populate('students', 'name rollNo email phone').populate('faculty', 'name email');
+  if (populate) q = q.populate('students', 'name rollNo email phone level program batch section semester').populate('faculty', 'name email');
   const course = await q;
   if (!course) throw new HttpError(404, 'Course not found');
   const facultyId = String(course.faculty?._id || course.faculty);

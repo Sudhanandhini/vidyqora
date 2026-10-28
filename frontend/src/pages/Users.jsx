@@ -29,13 +29,16 @@ export default function Users() {
   const refresh = () => { reload(); deletedCount.reload(); };
   const trash = useTrash('/users', refresh);
   const students = role === 'student';
+  const [course, setCourse] = useState(''); // faculty: one of my courses
   const rows = (data || []).filter((u) => Object.entries(filters).every(([k, v]) => !v || u[k] === v)
+    && (!course || u.courses?.some((c) => c._id === course))
     && (!showDeleted || matches(q, u.name, u.email, u.phone, u.rollNo, u.employeeId)));
 
   const save = async (e) => {
     e.preventDefault();
     setBusy(true);
     try {
+      if (isFaculty && !edit._id && !edit.courses.length) throw new Error('Select at least one of your courses for this student');
       const body = { ...edit }; if (!body.password) delete body.password;
       let enrolled = 0;
       if (edit._id) await api.put(`/users/${edit._id}`, body); else ({ enrolled } = (await api.post('/users', body)).data);
@@ -57,7 +60,7 @@ export default function Users() {
 
   return (
     <>
-      <PageHeader title={isFaculty ? 'Students' : 'Users'} subtitle={isFaculty ? 'Student accounts. Students you add here are visible to admin and enrolled in your selected courses.' : 'Accounts for students, faculty and office staff.'}
+      <PageHeader title={isFaculty ? 'My students' : 'Users'} subtitle={isFaculty ? 'Students enrolled in your courses. To add an existing student to a course, open My courses and use Students.' : 'Accounts for students, faculty and office staff.'}
         actions={<>
           {!isFaculty && (showDeleted
             ? <Button variant="secondary" onClick={() => setActive('')}><ArrowLeft size={16} />Back to all users</Button>
@@ -69,6 +72,7 @@ export default function Users() {
       <Card pad={false}>
         <FilterBar>
           <SearchBox placeholder={`Search by name, email, phone or ${students ? 'roll number' : 'employee ID'}`} value={q} onChange={(e) => setQ(e.target.value)} />
+          {isFaculty && <FilterSelect label="Course" value={course} onChange={(e) => setCourse(e.target.value)} placeholder="All my courses" options={(myCourses || []).map((c) => ({ value: c._id, label: `${c.code} ${c.name}` }))} />}
           <FilterSelect label="Status" value={active} onChange={(e) => setActive(e.target.value)} placeholder="All statuses" options={isFaculty ? ACTIVE_OPTIONS.slice(0, 2) : ACTIVE_OPTIONS} />
           {students ? <>
             <FilterSelect label="Level" value={filters.level} onChange={setFilter('level')} placeholder="All levels" options={masters.levels} />
@@ -80,10 +84,11 @@ export default function Users() {
           {Object.values(filters).some(Boolean) && <Button size="sm" variant="ghost" onClick={() => setFilters(NO_FILTERS)}>Clear filters</Button>}
         </FilterBar>
         {loading ? <Loading /> : (
-          <Table rows={rows} empty="No users match these filters" columns={[
+          <Table rows={rows} empty={isFaculty && !data?.length ? 'No students in your courses yet. Open My courses and use Students to add them.' : 'No users match these filters'} columns={[
             { label: 'Name', render: (u) => <><p className="font-medium">{u.name}</p><p className="text-xs text-ink-faint">{u.email}</p></> },
             { label: students ? 'Roll number' : 'Employee ID', render: (u) => u.rollNo || u.employeeId || '-' },
             { label: students ? 'Batch / Section' : 'Department', render: (u) => (students ? [u.level, u.program, u.batch, u.section, u.semester].filter(Boolean).join(' / ') : u.department) || '-' },
+            isFaculty && { label: 'My courses', render: (u) => <div className="flex flex-wrap gap-1">{u.courses?.map((c) => <Badge key={c._id} tone="blue">{c.code}</Badge>)}</div> },
             { label: 'Phone', key: 'phone' },
             { label: 'Status', render: (u) => (u.deletedAt ? <DeletedBadge item={u} /> : <Badge tone={u.active ? 'green' : 'grey'}>{u.active ? 'Active' : 'Inactive'}</Badge>) },
             !isFaculty && { label: '', className: 'text-right', render: (u) => (u.deletedAt ? trash.actions(u, u.name) : (
@@ -113,7 +118,7 @@ export default function Users() {
                 <Field label="Section"><MasterSelect list={masters.sections} value={edit.section} onChange={set('section')} /></Field>
                 <Field label="Semester"><MasterSelect list={masters.semesters} value={edit.semester} onChange={set('semester')} /></Field>
                 {isFaculty && !edit._id && myCourses?.length > 0 && (
-                  <Field label="Enrol in my courses" hint="Courses for the same batch and section are added automatically" className="sm:col-span-2">
+                  <Field label="Enrol in my courses (required)" hint="Pick at least one. Courses matching the student's level, program, batch, section and semester are also added automatically." className="sm:col-span-2">
                     <div className="flex flex-wrap gap-x-5 gap-y-2 pt-1">
                       {myCourses.map((c) => (
                         <label key={c._id} className="flex items-center gap-2 text-[14px]">

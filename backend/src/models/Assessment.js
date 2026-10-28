@@ -5,6 +5,9 @@ const assessmentSchema = new mongoose.Schema({
   course: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true, index: true },
   name: { type: String, required: true, trim: true },
   maxMarks: { type: Number, required: true, min: 1 },
+  passMarks: { type: Number, min: 0 }, // extra tests: below this is a fail (scheme parts use the course's pass marks)
+  // Evaluation-scheme part this assessment records (e.g. MSE, ESE, CPA); blank for extra tests/quizzes.
+  component: { type: String, uppercase: true, trim: true },
   date: Date,
   marks: [{
     _id: false,

@@ -17,12 +17,20 @@ trashRoutes(r, User, {
   ]),
 });
 
-// Admin and staff can look up users; faculty can look up students only.
+// Admin and staff can look up users. Faculty see only students enrolled in their own courses
+// (faculty -> courses -> students), each tagged with the course codes; `pool=all` lists every
+// active student so faculty can pick new ones for a course.
 r.get('/', allow('admin', 'staff', 'faculty'), ah(async (req, res) => {
   const { role, q, batch, section, active } = req.query;
   const f = {};
-  if (req.user.role === 'faculty') f.role = 'student';
-  else if (role) f.role = role;
+  let mine = null;
+  if (req.user.role === 'faculty') {
+    f.role = 'student';
+    if (req.query.pool !== 'all') {
+      mine = await Course.find({ faculty: req.user._id }).select('code name students').lean();
+      f._id = { $in: [...new Set(mine.flatMap((c) => c.students.map(String)))] };
+    }
+  } else if (role) f.role = role;
   if (batch) f.batch = batch;
   if (section) f.section = section;
   if (active !== undefined && active !== '') f.active = active === 'true';
@@ -30,13 +38,18 @@ r.get('/', allow('admin', 'staff', 'faculty'), ah(async (req, res) => {
     const rx = new RegExp(q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     f.$or = [{ name: rx }, { email: rx }, { phone: rx }, { rollNo: rx }, { employeeId: rx }];
   }
-  res.json(await User.find(f).sort({ role: 1, name: 1 }).limit(500).lean());
+  const list = await User.find(f).sort({ role: 1, name: 1 }).limit(500).lean();
+  if (!mine) return res.json(list);
+  res.json(list.map((u) => ({ ...u, courses: mine.filter((c) => c.students.some((s) => String(s) === String(u._id))).map((c) => ({ _id: c._id, code: c.code, name: c.name })) })));
 }));
 
 /** Enrol a new student in courses for their batch/section, plus any course ids picked (faculty: own courses only). */
 async function enrolNewStudent(user, picked, by) {
   const match = [];
-  if (user.batch) match.push({ batch: user.batch, section: { $in: [user.section || '', '', null] } });
+  // Courses for the student's batch whose other targeting fields are blank or equal to the student's.
+  if (user.batch) {
+    match.push({ batch: user.batch, $and: ['level', 'program', 'section', 'semester'].map((k) => ({ [k]: { $in: [user[k] || '', '', null] } })) });
+  }
   if (Array.isArray(picked) && picked.length) {
     match.push(by.role === 'faculty' ? { _id: { $in: picked }, faculty: by._id } : { _id: { $in: picked } });
   }
@@ -47,7 +60,14 @@ async function enrolNewStudent(user, picked, by) {
 // Admin can add any user; faculty can add students only.
 r.post('/', allow('admin', 'faculty'), ah(async (req, res) => {
   const data = pick(req.body);
-  if (req.user.role === 'faculty') { data.role = 'student'; delete data.active; }
+  if (req.user.role === 'faculty') {
+    data.role = 'student'; delete data.active;
+    // Faculty only see students of their own courses, so a new student must join at least one of them.
+    const picked = Array.isArray(req.body.courses) ? req.body.courses : [];
+    if (!picked.length || !(await Course.countDocuments({ _id: { $in: picked }, faculty: req.user._id }))) {
+      throw new HttpError(400, 'Select at least one of your courses for this student');
+    }
+  }
   data.password = req.body.password || 'Welcome@123';
   const user = await User.create(data);
   const enrolled = user.role === 'student' ? await enrolNewStudent(user, req.body.courses, req.user) : 0;

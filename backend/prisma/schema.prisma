@@ -122,6 +122,13 @@ type LessonPlanItem {
   done    Boolean   @default(false)
 }
 
+type EvaluationPart {
+  key   String?
+  label String?
+  max   Float?
+  pass  Float?
+}
+
 type MessageAudience {
   type     AudienceType @default(role)
   roles    String[]
@@ -201,7 +208,14 @@ model Course {
   batch      String?
   section    String?
   semester   String?
+  type       String?          @default("theory")
+  lectures   Int?
+  tutorials  Int?
+  practicals Int?
   credits    Int              @default(3)
+  hours      Int?
+  evaluation EvaluationPart[]
+  passMarks  Float?
   facultyId  String?          @map("faculty") @db.ObjectId
   faculty    User?            @relation("CourseFaculty", fields: [facultyId], references: [id])
   // Enrolled student ids. Kept as a plain id list (not a Prisma m-n relation) because
@@ -243,6 +257,8 @@ model Assessment {
   course      Course           @relation(fields: [courseId], references: [id])
   name        String
   maxMarks    Float
+  passMarks   Float?
+  component   String?
   date        DateTime?
   marks       AssessmentMark[]
   status      AssessmentStatus @default(draft)

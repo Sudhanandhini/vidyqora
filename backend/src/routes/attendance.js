@@ -33,16 +33,28 @@ r.post('/', allow('faculty', 'admin'), ah(async (req, res) => {
   res.json(doc);
 }));
 
-// Course register summary (faculty/admin)
+// Course register (faculty/admin): every session in date order with each student's code, plus totals.
+// Optional ?from=YYYY-MM-DD&to=YYYY-MM-DD limits the dates.
 r.get('/course/:id/summary', allow('faculty', 'admin'), ah(async (req, res) => {
   const c = await courseFor(req.user, req.params.id, { populate: true });
-  const sheets = await Attendance.find({ course: c._id }).lean();
-  const map = new Map(c.students.map((s) => [String(s._id), { student: s, total: 0, present: 0 }]));
+  const f = { course: c._id };
+  if (req.query.from || req.query.to) {
+    f.date = {};
+    if (req.query.from) f.date.$gte = dayStart(req.query.from);
+    if (req.query.to) f.date.$lte = dayStart(req.query.to);
+  }
+  const sheets = await Attendance.find(f).sort({ date: 1, period: 1 }).lean();
+  const map = new Map(c.students.map((s) => [String(s._id), { student: s, total: 0, present: 0, codes: {} }]));
   sheets.forEach((sh) => sh.records.forEach((x) => {
     const m = map.get(String(x.student)); if (!m) return;
+    m.codes[String(sh._id)] = x.status;
     m.total++; if (PRESENT_CODES.includes(x.status)) m.present++;
   }));
-  res.json({ sessions: sheets.length, rows: [...map.values()].map((m) => ({ ...m, pct: m.total ? Math.round((m.present / m.total) * 100) : null })) });
+  res.json({
+    sessions: sheets.length,
+    sessionList: sheets.map((sh) => ({ _id: sh._id, date: sh.date, period: sh.period, topic: sh.topic })),
+    rows: [...map.values()].map((m) => ({ ...m, pct: m.total ? Math.round((m.present / m.total) * 100) : null })),
+  });
 }));
 
 // Student's own summary
@@ -55,11 +67,33 @@ r.get('/my', allow('student'), ah(async (req, res) => {
     { $group: { _id: '$course', total: { $sum: 1 },
       present: { $sum: { $cond: [{ $in: ['$records.status', PRESENT_CODES] }, 1, 0] } } } },
   ]);
-  const courses = await Course.find({ _id: { $in: agg.map((a) => a._id) } }).select('code name').lean();
+  const courses = await Course.find({ _id: { $in: agg.map((a) => a._id) } }).select('code name faculty').populate('faculty', 'name').lean();
   const byId = Object.fromEntries(courses.map((c) => [String(c._id), c]));
-  const rows = agg.map((a) => ({ course: byId[String(a._id)], total: a.total, present: a.present, pct: Math.round((a.present / a.total) * 100) }));
+  const rows = agg.filter((a) => byId[String(a._id)]) // skip deleted courses
+    .map((a) => ({ course: byId[String(a._id)], total: a.total, present: a.present, pct: Math.round((a.present / a.total) * 100) }));
   const total = rows.reduce((s, x) => s + x.total, 0), present = rows.reduce((s, x) => s + x.present, 0);
   res.json({ overall: total ? Math.round((present / total) * 100) : null, rows });
+}));
+
+// Student's date-wise attendance across all courses, as marked by faculty.
+// Optional ?course=&from=YYYY-MM-DD&to=YYYY-MM-DD. Registered before /my/:courseId.
+r.get('/my/log', allow('student'), ah(async (req, res) => {
+  const f = { 'records.student': req.user._id };
+  if (req.query.course) f.course = req.query.course;
+  if (req.query.from || req.query.to) {
+    f.date = {};
+    if (req.query.from) f.date.$gte = dayStart(req.query.from);
+    if (req.query.to) f.date.$lte = dayStart(req.query.to);
+  }
+  const sheets = await Attendance.find(f).sort({ date: -1, period: 1 }).limit(1000)
+    .populate({ path: 'course', select: 'code name faculty', populate: { path: 'faculty', select: 'name' } })
+    .populate('markedBy', 'name').lean();
+  res.json(sheets.filter((s) => s.course).map((s) => ({
+    _id: s._id, date: s.date, period: s.period, topic: s.topic,
+    course: { _id: s.course._id, code: s.course.code, name: s.course.name },
+    faculty: s.markedBy?.name || s.course.faculty?.name || null,
+    status: s.records.find((x) => String(x.student) === String(req.user._id))?.status,
+  })));
 }));
 
 // Student's day-wise log for one course
