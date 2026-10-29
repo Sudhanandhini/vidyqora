@@ -8,7 +8,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { connectDB } from './config/db.js';
-import { protect } from './middleware/auth.js';
+import { protect, grant } from './middleware/auth.js';
 import { notFound, errorHandler } from './middleware/error.js';
 import { startScheduler } from './utils/notify.js';
 import { UPLOAD_DIR } from './middleware/upload.js';
@@ -25,6 +25,7 @@ import requests from './routes/requests.js';
 import dashboard from './routes/dashboard.js';
 import reports from './routes/reports.js';
 import masters from './routes/masters.js';
+import permissions from './routes/permissions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -42,19 +43,20 @@ app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'Vidyqora' }));
 app.use('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, skipSuccessfulRequests: true,
   message: { message: 'Too many failed sign-in attempts. Please wait 15 minutes and try again.' } }));
 app.use('/api/auth', auth);
-app.use('/api/users', protect, users);
-app.use('/api/courses', protect, courses);
+app.use('/api/users', protect, grant('users'), users);
+app.use('/api/courses', protect, grant('courses'), courses);
 app.use('/api/attendance', protect, attendance);
 app.use('/api/assignments', protect, assignments);
 app.use('/api/assessments', protect, assessments);
-app.use('/api/calendar', protect, calendar);
-app.use('/api/messages', protect, messages);
+app.use('/api/calendar', protect, grant('calendar'), calendar);
+app.use('/api/messages', protect, grant('messaging'), messages);
 app.use('/api/notifications', protect, notifications);
-app.use('/api/fees', protect, fees);
-app.use('/api/requests', protect, requests);
+app.use('/api/fees', protect, grant('fees'), fees);
+app.use('/api/requests', protect, grant('requests'), requests);
 app.use('/api/dashboard', protect, dashboard);
-app.use('/api/reports', protect, reports);
-app.use('/api/masters', protect, masters);
+app.use('/api/reports', protect, grant('reports'), reports);
+app.use('/api/masters', protect, grant('setup'), masters);
+app.use('/api/permissions', protect, permissions);
 app.use('/api', notFound);
 
 // Serve the built client (single deployment, e.g. cPanel Node.js app)

@@ -56,9 +56,14 @@ r.post('/preview', allow('admin', 'staff', 'faculty'), ah(async (req, res) => {
   res.json({ recipients: (await resolveRecipients(req.body.audience)).length });
 }));
 
+// Keep only the fields of the chosen audience type; the form also sends the unused ones (e.g. course: '').
+const cleanAudience = ({ type, roles, course, users }) => ({ type,
+  ...(type === 'role' && { roles }), ...(type === 'course' && { course }), ...(type === 'users' && { users }) });
+
 r.post('/', allow('admin', 'staff', 'faculty'), ah(async (req, res) => {
-  const { subject, body, channels, audience, scheduledAt, template } = req.body;
-  await checkAudience(req.user, audience);
+  const { subject, body, channels, scheduledAt, template } = req.body;
+  await checkAudience(req.user, req.body.audience);
+  const audience = cleanAudience(req.body.audience);
   if (!channels?.length) throw new HttpError(400, 'Choose at least one channel');
   const msg = await Message.create({ subject, body, channels, audience, template: template || undefined,
     scheduledAt: scheduledAt ? new Date(scheduledAt) : new Date(), sentBy: req.user._id });

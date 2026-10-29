@@ -8,6 +8,19 @@ const r = Router();
 const FIELDS = ['name', 'email', 'role', 'phone', 'department', 'designation', 'employeeId', 'rollNo', 'level', 'program', 'batch', 'section', 'semester', 'active'];
 const pick = (b) => Object.fromEntries(FIELDS.filter((k) => b[k] !== undefined).map((k) => [k, b[k]]));
 
+// Staff or faculty given the Users section (see permissions) manage everyone except admins:
+// they cannot create or promote an admin, or change, delete or restore an admin account.
+r.use(ah(async (req, _res, next) => {
+  if (!req.user.actualRole || req.method === 'GET') return next();
+  if (req.body?.role === 'admin') throw new HttpError(403, 'Only an admin can create or promote admins');
+  const id = req.path.split('/')[1];
+  if (/^[0-9a-f]{24}$/i.test(id || '')) {
+    const target = await User.findById(id).setOptions({ withDeleted: true }).select('role').lean();
+    if (target?.role === 'admin') throw new HttpError(403, 'Only an admin can change admin accounts');
+  }
+  next();
+}));
+
 trashRoutes(r, User, {
   roles: ['admin'],
   scope: (req) => (req.query.role ? { role: req.query.role } : {}),

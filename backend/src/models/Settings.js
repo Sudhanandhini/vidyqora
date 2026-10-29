@@ -14,6 +14,11 @@ const settingsSchema = new mongoose.Schema({
   sections: { type: [String], default: [] },
   semesters: { type: [String], default: [] },
   feeTypes: { type: [String], default: [] }, // fee titles offered in the Add fee form
+  // Sections (users, courses, setup, ...) the admin has opened up to a role with full admin access
+  permissions: {
+    staff: { type: [String], default: [] },
+    faculty: { type: [String], default: [] },
+  },
 }, { timestamps: true });
 
 settingsSchema.statics.getMain = async function getMain() {

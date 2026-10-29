@@ -22,7 +22,7 @@ export default function Notifications() {
 
   return (
     <>
-      <PageHeader title="Messages and notifications" subtitle={data ? `${data.unread} unread` : ''}
+      <PageHeader title="Notifications" subtitle={data ? `${data.unread} unread` : ''}
         actions={data?.unread > 0 && <Button variant="secondary" onClick={readAll}>Mark all as read</Button>} />
       <Tabs tabs={[{ value: 'unread', label: `Unread${data?.unread ? ` (${data.unread})` : ''}` }, { value: 'all', label: 'All notifications' }]} value={tab} onChange={(t) => { setTab(t); setJustRead([]); }} />
       <Card pad={false}>

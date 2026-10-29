@@ -3,7 +3,7 @@ import Assignment, { Submission } from '../models/Assignment.js';
 import Course from '../models/Course.js';
 import { ah, allow, HttpError } from '../middleware/auth.js';
 import { courseFor, courseScope } from '../utils/access.js';
-import { upload, toFiles } from '../middleware/upload.js';
+import { upload, toFiles, MAX_FILES } from '../middleware/upload.js';
 import { notifyUsers } from '../utils/notify.js';
 import { trashRoutes } from '../utils/softDelete.js';
 
@@ -41,7 +41,7 @@ r.get('/', ah(async (req, res) => {
     submitted: cm[String(a._id)]?.submitted || 0, evaluated: cm[String(a._id)]?.evaluated || 0 })));
 }));
 
-r.post('/', allow('faculty', 'admin'), upload.array('files', 5), ah(async (req, res) => {
+r.post('/', allow('faculty', 'admin'), upload.array('files', MAX_FILES), ah(async (req, res) => {
   const c = await courseFor(req.user, req.body.course);
   const { title, description, topic, publishDate, dueDate, extendedDate, maxMarks, hideIdentity } = req.body;
   const a = await Assignment.create({
@@ -88,7 +88,7 @@ r.get('/:id/submissions', allow('faculty', 'admin'), ah(async (req, res) => {
   });
 }));
 
-r.post('/:id/submit', allow('student'), upload.array('files', 5), ah(async (req, res) => {
+r.post('/:id/submit', allow('student'), upload.array('files', MAX_FILES), ah(async (req, res) => {
   const a = await Assignment.findById(req.params.id);
   if (!a || a.publishDate > new Date()) throw new HttpError(404, 'Assignment not found');
   await courseFor(req.user, a.course);

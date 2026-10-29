@@ -5,7 +5,12 @@ import { useAuth } from '../context/AuthContext';
 import { FilterBar, SearchBox, FilterSelect, ACTIVE_OPTIONS, DeletedBadge, useTrash, deleteWithRestore, matches } from '../components/listTools';
 import { useFetch, PageHeader, Card, Table, Button, Modal, Field, Input, Textarea, Select, Tabs, Loading, Badge, StatusBadge, fmtDateTime, toast, errMsg } from '../components/ui';
 
-const CHANNELS = [{ value: 'inapp', label: 'In-app' }, { value: 'email', label: 'Email' }, { value: 'sms', label: 'SMS' }, { value: 'push', label: 'Push' }];
+const CHANNELS = [
+  { value: 'inapp', label: 'In-app', hint: 'Shows under Notifications and the bell when they open Vidyqora.' },
+  { value: 'email', label: 'Email', hint: 'Sent to the email address on their profile.' },
+  { value: 'sms', label: 'SMS', hint: 'Text message to the phone number on their profile.' },
+  { value: 'push', label: 'Push', hint: 'Pop-up alert on their phone or browser, even when Vidyqora is closed. Not set up yet, so it is delivered as in-app only for now.' },
+];
 const GROUPS = [{ value: 'student', label: 'Students' }, { value: 'faculty', label: 'Faculty' }, { value: 'staff', label: 'Office staff' }];
 
 function Compose({ onSent }) {
@@ -47,13 +52,14 @@ function Compose({ onSent }) {
 
   return (
     <form onSubmit={send} className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-      <Card title="Message">
-        <div className="space-y-4">
+      {/* Message box fills the column height; the textarea grows into the extra space */}
+      <Card title="Message" className="flex flex-col [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col">
+        <div className="flex flex-1 flex-col space-y-4">
           {!!templates.data?.length && (
             <Field label="Start from a template"><Select value={m.template || ''} onChange={(e) => applyTemplate(e.target.value)} placeholder="Blank message" options={templates.data.filter((t) => t.active).map((t) => ({ value: t._id, label: `${t.name} (${t.channel})` }))} /></Field>
           )}
           <Field label="Subject"><Input required value={m.subject} onChange={(e) => setM({ ...m, subject: e.target.value })} /></Field>
-          <Field label="Message" hint="Use {name} or {rollNo} to personalise each message."><Textarea rows={7} required value={m.body} onChange={(e) => setM({ ...m, body: e.target.value })} /></Field>
+          <Field label="Message" className="flex flex-1 flex-col" hint="Use {name} or {rollNo} to personalise each message."><Textarea rows={7} className="flex-1" required value={m.body} onChange={(e) => setM({ ...m, body: e.target.value })} /></Field>
           {m.channels.includes('sms') && <p className="text-xs text-ink-faint">{m.body.length} characters, {Math.max(1, Math.ceil(m.body.length / 160))} SMS per person. SMS text must match an approved DLT template.</p>}
         </div>
       </Card>
@@ -103,10 +109,11 @@ function Compose({ onSent }) {
         </Card>
         <Card title="Delivery">
           <div className="space-y-4">
-            <div className="flex flex-wrap gap-x-5 gap-y-2">
+            <div className="space-y-3">
               {CHANNELS.map((c) => (
-                <label key={c.value} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" className="h-4 w-4 accent-[#062a52]" checked={m.channels.includes(c.value)} onChange={() => setM({ ...m, channels: toggle(m.channels, c.value) })} />{c.label}
+                <label key={c.value} className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-[#062a52]" checked={m.channels.includes(c.value)} onChange={() => setM({ ...m, channels: toggle(m.channels, c.value) })} />
+                  <span><span className="font-medium">{c.label}</span><span className="block text-xs text-ink-faint">{c.hint}</span></span>
                 </label>
               ))}
             </div>

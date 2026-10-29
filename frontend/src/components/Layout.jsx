@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, BookOpen, CalendarCheck, ClipboardList, GraduationCap, CalendarDays,
-  Send, Wallet, FileQuestion, FileSpreadsheet, Bell, Menu, X, LogOut, UserCircle, Settings2,
+  Send, Wallet, FileQuestion, FileSpreadsheet, Bell, Menu, X, LogOut, UserCircle, Settings2, ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
@@ -10,25 +10,39 @@ import api from '../api';
 const NAV = {
   admin: [
     ['/', 'Dashboard', LayoutDashboard], ['/users', 'Users', Users], ['/courses', 'Courses', BookOpen], ['/setup', 'Academic setup', Settings2],
-    ['/calendar', 'Calendar', CalendarDays], ['/messaging', 'Messaging', Send], ['/fees', 'Fees', Wallet],
+    ['/permissions', 'Permissions', ShieldCheck], ['/calendar', 'Calendar', CalendarDays], ['/messaging', 'Messaging', Send], ['/fees', 'Fees', Wallet],
     ['/requests', 'Requests', FileQuestion], ['/reports', 'Reports', FileSpreadsheet],
   ],
   staff: [
     ['/', 'Dashboard', LayoutDashboard], ['/fees', 'Fees', Wallet], ['/requests', 'Requests', FileQuestion],
-    ['/calendar', 'Calendar', CalendarDays], ['/messaging', 'Messaging', Send], ['/reports', 'Reports', FileSpreadsheet],
+    ['/calendar', 'Calendar', CalendarDays], ['/messaging', 'Messaging', Send], ['/notifications', 'Notifications', Bell], ['/reports', 'Reports', FileSpreadsheet],
   ],
   faculty: [
     ['/', 'Dashboard', LayoutDashboard], ['/courses', 'My courses', BookOpen], ['/users', 'Students', Users], ['/attendance', 'Attendance', CalendarCheck],
     ['/assignments', 'Assignments', ClipboardList], ['/marks', 'Marks', GraduationCap], ['/calendar', 'Calendar', CalendarDays],
-    ['/messaging', 'Messaging', Send], ['/reports', 'Reports', FileSpreadsheet],
+    ['/messaging', 'Messaging', Send], ['/notifications', 'Notifications', Bell], ['/reports', 'Reports', FileSpreadsheet],
   ],
   student: [
     ['/', 'Dashboard', LayoutDashboard], ['/courses', 'My courses', BookOpen], ['/attendance', 'Attendance', CalendarCheck],
     ['/assignments', 'Assignments', ClipboardList], ['/marks', 'Results', GraduationCap], ['/calendar', 'Calendar', CalendarDays],
-    ['/fees', 'Fees', Wallet], ['/requests', 'Requests', FileQuestion], ['/notifications', 'Messages', Bell], ['/reports', 'Downloads', FileSpreadsheet],
+    ['/fees', 'Fees', Wallet], ['/requests', 'Requests', FileQuestion], ['/notifications', 'Notifications', Bell], ['/reports', 'Downloads', FileSpreadsheet],
   ],
 };
-const ROLE_LABEL = { admin: 'Administrator', staff: 'Office staff', faculty: 'Faculty', student: 'Student' };
+/**
+ * The role's own links, plus the admin's link for each section granted to that role (section = path
+ * without the slash). A granted section the role already has, e.g. faculty "Students", takes the admin label.
+ */
+function navFor(user) {
+  const base = NAV[user.role] || [];
+  const granted = NAV.admin.filter(([to]) => user.access?.includes(to.slice(1)));
+  if (!granted.length) return base;
+  const links = base.map((l) => granted.find(([to]) => to === l[0]) || l);
+  const extra = granted.filter(([to]) => !base.some(([b]) => b === to));
+  const at = links.findIndex(([to]) => to === '/reports');
+  return at < 0 ? [...links, ...extra] : [...links.slice(0, at), ...extra, ...links.slice(at)];
+}
+
+const ROLE_LABEL ={ admin: 'Administrator', staff: 'Office staff', faculty: 'Faculty', student: 'Student' };
 
 export function Wordmark({ light }) {
   return (
@@ -54,7 +68,7 @@ export default function Layout() {
     return () => { alive = false; clearInterval(t); window.removeEventListener('notifications:changed', poll); };
   }, [loc.pathname]);
 
-  const links = NAV[user.role] || [];
+  const links = navFor(user);
   return (
     <div className="min-h-screen lg:flex">
       <aside className={`fixed inset-y-0 left-0 z-40 flex h-screen w-64 shrink-0 flex-col bg-primary text-primary-100 transition-transform lg:sticky lg:top-0 lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>

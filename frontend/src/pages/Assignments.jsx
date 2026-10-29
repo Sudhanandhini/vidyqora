@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Plus, Paperclip } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Plus, Paperclip, ArrowLeft } from 'lucide-react';
 import api, { fileUrl } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { DeletedItems, DeletedBadge, deleteWithRestore } from '../components/listTools';
-import { useFetch, usePaged, Pagination, PageHeader, Card, Table, Button, Modal, Field, Input, Textarea, Select, Loading, Empty, Badge, StatusBadge, Tabs, fmtDate, fmtDateTime, isoDate, toast, errMsg } from '../components/ui';
+import { DeletedItems, DeletedBadge, deleteWithRestore, FilterBar, SearchBox, FilterSelect, matches } from '../components/listTools';
+import { useFetch, usePaged, Pagination, PageHeader, Card, Table, Button, Modal, Field, Input, Textarea, Select, Loading, Empty, Badge, StatusBadge, Tabs, FilePicker, MAX_FILES, MAX_FILE_MB, fmtDate, fmtDateTime, isoDate, toast, errMsg } from '../components/ui';
 
 const Files = ({ files }) => (files?.length ? (
   <div className="mt-1 flex flex-wrap gap-2">
@@ -13,11 +14,22 @@ const Files = ({ files }) => (files?.length ? (
 const deadline = (a) => a.extendedDate || a.dueDate;
 
 /* ---------------- Faculty ---------------- */
-function Evaluate({ assignment, onClose }) {
-  const { data, loading, reload } = useFetch(assignment ? `/assignments/${assignment._id}/submissions` : null);
+const SUB_FILTERS = [
+  { value: 'pending', label: 'To evaluate' }, { value: 'evaluated', label: 'Evaluated' }, { value: 'resubmit', label: 'Resubmission asked' },
+  { value: 'late', label: 'Late' }, { value: 'none', label: 'Not submitted' },
+];
+const subMatches = (s, status) => (status === 'none' ? !s : status === 'late' ? !!s?.late : status === 'pending' ? s?.status === 'submitted' : s?.status === status);
+
+/** Submissions of one assignment at /assignments/:id, with search and a status filter. */
+export function EvaluatePage() {
+  const { id } = useParams();
+  const { data, loading, error, reload } = useFetch(`/assignments/${id}/submissions`);
   const [draft, setDraft] = useState({});
   const [busy, setBusy] = useState('');
-  const subsPaged = usePaged(data?.rows, (r) => r.student._id);
+  const [f, setF] = useState({ q: '', status: '' });
+  const rows = (data?.rows || []).filter(({ student, submission }) => matches(f.q, student.name, student.rollNo, submission?.text)
+    && (!f.status || subMatches(submission, f.status)));
+  const subsPaged = usePaged(rows, (r) => r.student._id);
   const save = async (sub, status) => {
     const d = draft[sub._id] || {};
     setBusy(sub._id + status);
@@ -26,18 +38,29 @@ function Evaluate({ assignment, onClose }) {
       toast(status === 'resubmit' ? 'Sent back for resubmission' : 'Evaluation saved'); reload();
     } catch (e) { errMsg(e); } finally { setBusy(''); }
   };
-  const set = (id, k, v) => setDraft({ ...draft, [id]: { ...draft[id], [k]: v } });
-  const submitted = data?.rows.filter((r) => r.submission).length || 0;
+  const set = (sid, k, v) => setDraft({ ...draft, [sid]: { ...draft[sid], [k]: v } });
+  const all = data?.rows || [];
+  const count = (status) => all.filter((r) => subMatches(r.submission, status)).length;
+  const back = <Link to="/assignments" className="inline-flex items-center gap-1 text-sm text-primary-500 hover:underline"><ArrowLeft size={15} />All assignments</Link>;
 
+  if (error) return <>{back}<Empty title="Assignment not found" /></>;
+  if (loading || !data) return <Loading />;
+  const a = data.assignment;
   return (
-    <Modal open={!!assignment} onClose={onClose} wide title={assignment?.title || ''}>
-      {loading || !data ? <Loading /> : (
-        <>
-          <p className="mb-4 text-sm text-ink-soft">{submitted} of {data.rows.length} submitted. Due {fmtDate(deadline(data.assignment))}. Maximum {data.assignment.maxMarks} marks.
-            {data.assignment.hideIdentity && ' Student identity is hidden for this assignment.'}</p>
+    <>
+      <div className="mb-3">{back}</div>
+      <PageHeader title={a.title}
+        subtitle={`${all.length - count('none')} of ${all.length} submitted, ${count('evaluated')} evaluated. Due ${fmtDate(deadline(a))}. Maximum ${a.maxMarks} marks.${a.hideIdentity ? ' Student identity is hidden for this assignment.' : ''}`} />
+      <Card pad={false}>
+        <FilterBar>
+          <SearchBox placeholder="Search by student, roll number or answer" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} />
+          <FilterSelect label="Status" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} placeholder={`All students (${all.length})`}
+            options={SUB_FILTERS.map((o) => ({ value: o.value, label: `${o.label} (${count(o.value)})` }))} />
+        </FilterBar>
+        {!rows.length ? <p className="p-5 text-sm text-ink-soft">No students match these filters.</p> : (
           <ul className="divide-y divide-primary-50">
             {subsPaged.items.map(({ student, submission: s }) => (
-              <li key={student._id} className="py-3">
+              <li key={student._id} className="px-5 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-medium">{student.name} <span className="text-sm font-normal text-ink-faint">{student.rollNo}</span></p>
                   {s ? <div className="flex items-center gap-2">{s.late && <Badge tone="red">Late</Badge>}<StatusBadge status={s.status} /></div> : <Badge tone="grey">Not submitted</Badge>}
@@ -48,7 +71,7 @@ function Evaluate({ assignment, onClose }) {
                     {s.text && <p className="mt-1 whitespace-pre-wrap text-sm">{s.text}</p>}
                     <Files files={s.files} />
                     <div className="mt-2 flex flex-wrap items-end gap-2">
-                      <Field label="Marks" className="w-24"><Input type="number" min={0} max={data.assignment.maxMarks} value={draft[s._id]?.marks ?? s.marks ?? ''} onChange={(e) => set(s._id, 'marks', e.target.value)} /></Field>
+                      <Field label="Marks" className="w-24"><Input type="number" min={0} max={a.maxMarks} value={draft[s._id]?.marks ?? s.marks ?? ''} onChange={(e) => set(s._id, 'marks', e.target.value)} /></Field>
                       <Field label="Remarks" className="min-w-[200px] flex-1"><Input value={draft[s._id]?.remarks ?? s.remarks ?? ''} onChange={(e) => set(s._id, 'remarks', e.target.value)} /></Field>
                       <Button size="sm" onClick={() => save(s, 'evaluated')} loading={busy === s._id + 'evaluated'}>Save marks</Button>
                       <Button size="sm" variant="secondary" onClick={() => save(s, 'resubmit')} loading={busy === s._id + 'resubmit'}>Ask to resubmit</Button>
@@ -58,20 +81,20 @@ function Evaluate({ assignment, onClose }) {
               </li>
             ))}
           </ul>
-          <Pagination paged={subsPaged} className="-mx-5 -mb-5 mt-2" />
-        </>
-      )}
-    </Modal>
+        )}
+        <Pagination paged={subsPaged} />
+      </Card>
+    </>
   );
 }
 
 function FacultyView() {
+  const navigate = useNavigate();
   const courses = useFetch('/courses');
   const [course, setCourse] = useState('');
   const { data, loading, reload } = useFetch('/assignments', course ? { course } : {});
   const [form, setForm] = useState(null);
   const [files, setFiles] = useState([]);
-  const [evalOf, setEvalOf] = useState(null);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
 
@@ -117,15 +140,13 @@ function FacultyView() {
             { label: 'Evaluated', render: (a) => (a.submitted ? `${a.evaluated} / ${a.submitted}` : '-') },
             { label: '', className: 'text-right', render: (a) => (
               <div className="flex justify-end gap-1">
-                <Button size="sm" onClick={() => setEvalOf(a)}>Evaluate</Button>
+                <Button size="sm" onClick={() => navigate(`/assignments/${a._id}`)}>Evaluate</Button>
                 <Button size="sm" variant="ghost" onClick={() => extend(a)}>Extend</Button>
                 <Button size="sm" variant="danger" onClick={() => remove(a)}>Delete</Button>
               </div>) },
           ]} />
         )}
       </Card>
-
-      <Evaluate assignment={evalOf} onClose={() => { setEvalOf(null); reload(); }} />
 
       <Modal open={!!form} onClose={() => setForm(null)} title="New assignment"
         footer={<><Button variant="secondary" onClick={() => setForm(null)}>Cancel</Button><Button form="asg-form" type="submit" loading={busy}>Publish assignment</Button></>}>
@@ -138,7 +159,7 @@ function FacultyView() {
             <Field label="Maximum marks"><Input type="number" min={1} required value={form.maxMarks} onChange={set('maxMarks')} /></Field>
             <Field label="Publish on" hint="Students see it from this date"><Input type="date" required value={form.publishDate} onChange={set('publishDate')} /></Field>
             <Field label="Due date"><Input type="date" required min={form.publishDate} value={form.dueDate.slice(0, 10)} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} /></Field>
-            <Field label="Attachments" hint="Up to 5 files, 10 MB each" className="sm:col-span-2"><input type="file" multiple onChange={(e) => setFiles(e.target.files)} className="text-sm" /></Field>
+            <FilePicker label="Attachments" hint={`Up to ${MAX_FILES} files, ${MAX_FILE_MB} MB each`} className="sm:col-span-2" files={files} onChange={setFiles} />
             <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" className="h-4 w-4 accent-[#062a52]" checked={form.hideIdentity} onChange={set('hideIdentity')} />Hide student names during evaluation</label>
           </form>
         )}
@@ -205,11 +226,11 @@ function StudentView() {
           <Card pad={false}><Pagination paged={paged} className="border-t-0" /></Card>
         </div>
       )}
-      <Modal open={!!sub} onClose={() => setSub(null)} title={sub ? `Submit: ${sub.title}` : ''}
-        footer={<><Button variant="secondary" onClick={() => setSub(null)}>Cancel</Button><Button form="sub-form" type="submit" loading={busy}>Submit assignment</Button></>}>
+      <Modal open={!!sub} onClose={() => { setSub(null); setFiles([]); }} title={sub ? `Submit: ${sub.title}` : ''}
+        footer={<><Button variant="secondary" onClick={() => { setSub(null); setFiles([]); }}>Cancel</Button><Button form="sub-form" type="submit" loading={busy}>Submit assignment</Button></>}>
         <form id="sub-form" onSubmit={submit} className="space-y-4">
           <Field label="Answer or note"><Textarea rows={6} value={text} onChange={(e) => setText(e.target.value)} /></Field>
-          <Field label="Attach files" hint="PDF, Word, images or ZIP. Up to 5 files, 10 MB each."><input type="file" multiple onChange={(e) => setFiles(e.target.files)} className="text-sm" /></Field>
+          <FilePicker label="Attach files" hint={`PDF, Word, PowerPoint, Excel, images or ZIP. Up to ${MAX_FILES} files, ${MAX_FILE_MB} MB each.`} files={files} onChange={setFiles} />
           {sub && new Date(deadline(sub)) < now && <p className="text-sm text-red-700">The deadline has passed. This will be marked as a late submission.</p>}
         </form>
       </Modal>

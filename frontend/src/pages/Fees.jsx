@@ -106,8 +106,9 @@ function OfficeFees() {
     <>
       {data && !showDeleted && (
         <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat label={status === 'paid' ? 'Collected' : status === 'pending' ? 'Outstanding' : 'Total'} value={inr((data.totals.paid || 0) + (data.totals.pending || 0))} />
-          <Stat label="Entries" value={data.items.length} />
+          {/* Totals follow the search and filters, not just the tab */}
+          <Stat label={status === 'paid' ? 'Collected' : status === 'pending' ? 'Outstanding' : 'Total'} value={inr(rows.reduce((t, x) => t + x.amount, 0))} />
+          <Stat label="Entries" value={rows.length} />
         </div>
       )}
       <div className="flex flex-wrap items-end justify-between gap-3">

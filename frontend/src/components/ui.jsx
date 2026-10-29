@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { X, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Loader2, ChevronLeft, ChevronRight, Paperclip } from 'lucide-react';
 import api from '../api';
 
 /* ---------- data hook ---------- */
@@ -76,6 +76,71 @@ export const Select = ({ options = [], placeholder, ...p }) => (
     {options.map((o) => (typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.value} value={o.value}>{o.label}</option>))}
   </select>
 );
+
+/* ---------- file picker ---------- */
+// Keep in step with backend/src/middleware/upload.js
+export const MAX_FILES = 10;
+export const MAX_FILE_MB = 10;
+const FILE_ACCEPT = '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.png,.jpg,.jpeg,.webp,.gif,.zip';
+const fmtSize = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+
+function FileChip({ file, onRemove }) {
+  const isImage = file.type.startsWith('image/');
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    if (!isImage) return undefined;
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file, isImage]);
+  return (
+    <li className="flex items-center gap-2 rounded-md border border-primary-100 bg-white p-2">
+      {url ? <img src={url} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
+        : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-primary-50 text-[10px] font-semibold uppercase text-primary">{file.name.split('.').pop().slice(0, 4)}</span>}
+      <span className="min-w-0 flex-1"><span className="block truncate text-sm">{file.name}</span><span className="block text-xs text-ink-faint">{fmtSize(file.size)}</span></span>
+      <button type="button" onClick={onRemove} aria-label={`Remove ${file.name}`} className="rounded p-1 text-ink-faint hover:bg-red-50 hover:text-red-700"><X size={15} /></button>
+    </li>
+  );
+}
+
+// Each pick (or drop) adds to the list instead of replacing it; images show a thumbnail.
+export function FilePicker({ label, hint, files, onChange, max = MAX_FILES, className = '' }) {
+  const inputRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const add = (picked) => {
+    const next = [...files];
+    for (const f of picked) {
+      if (f.size > MAX_FILE_MB * 1048576) { toast(`"${f.name}" is larger than ${MAX_FILE_MB} MB`, 'error'); continue; }
+      if (next.some((x) => x.name === f.name && x.size === f.size)) continue;
+      if (next.length >= max) { toast(`You can attach up to ${max} files`, 'error'); break; }
+      next.push(f);
+    }
+    onChange(next);
+  };
+  return (
+    <div className={className}>
+      {label && <span className="label">{label}</span>}
+      <div onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); add([...e.dataTransfer.files]); }}
+        className={`rounded-md border border-dashed p-3 ${dragging ? 'border-primary-400 bg-primary-50' : 'border-primary-200'}`}>
+        <input ref={inputRef} type="file" multiple accept={FILE_ACCEPT} className="hidden"
+          onChange={(e) => { add([...e.target.files]); e.target.value = ''; }} />
+        {files.length > 0 && (
+          <ul className="mb-3 grid gap-2 sm:grid-cols-2">
+            {files.map((f, i) => <FileChip key={`${f.name}-${f.size}-${f.lastModified}`} file={f} onRemove={() => onChange(files.filter((_, j) => j !== i))} />)}
+          </ul>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" variant="secondary" size="sm" onClick={() => inputRef.current.click()} disabled={files.length >= max}>
+            <Paperclip size={14} />{files.length ? 'Add more files' : 'Choose files'}
+          </Button>
+          <span className="text-xs text-ink-faint">{files.length ? `${files.length} of ${max} attached` : 'or drag and drop here'}</span>
+        </div>
+      </div>
+      {hint && <span className="mt-1 block text-xs text-ink-faint">{hint}</span>}
+    </div>
+  );
+}
 
 // Level / department / program / batch / section / semester lists managed by admin under Academic setup.
 export const useMasters = () => useFetch('/masters').data || { levels: [], departments: [], programs: [], batches: [], sections: [], semesters: [], feeTypes: [] };

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import api from '../api';
 
 const AuthCtx = createContext(null);
@@ -25,3 +25,10 @@ export function AuthProvider({ children }) {
 }
 
 export const useAuth = () => useContext(AuthCtx);
+
+/** Wraps a page of a section the admin granted to this user's role, so the page shows its admin tools. */
+export function AsAdmin({ children }) {
+  const ctx = useContext(AuthCtx);
+  const value = useMemo(() => ({ ...ctx, user: { ...ctx.user, role: 'admin', actualRole: ctx.user.role } }), [ctx]);
+  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
+}

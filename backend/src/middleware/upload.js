@@ -7,7 +7,9 @@ import { fileURLToPath } from 'url';
 export const UPLOAD_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-const ALLOWED = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt', '.png', '.jpg', '.jpeg', '.zip'];
+// Keep in step with MAX_FILES / FILE_ACCEPT in frontend/src/components/ui.jsx
+export const MAX_FILES = 10;
+const ALLOWED = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.zip'];
 
 const storage = multer.diskStorage({
   destination: UPLOAD_DIR,
@@ -16,7 +18,7 @@ const storage = multer.diskStorage({
 
 export const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024, files: 5 },
+  limits: { fileSize: 10 * 1024 * 1024, files: MAX_FILES },
   fileFilter: (_req, file, cb) =>
     ALLOWED.includes(path.extname(file.originalname).toLowerCase())
       ? cb(null, true)
